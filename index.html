@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>✨ Antigravity DSA Visualizer</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Top Premium Navigation Bar -->
+    <header class="app-header">
+        <div class="header-logo">
+            <span class="logo-emoji">✨</span>
+            <div class="logo-text">
+                <h2>Antigravity Visualizer</h2>
+                <span>Premium AI-Powered Sandbox & Commentary</span>
+            </div>
+        </div>
+        <div class="header-actions-top">
+            <button id="focus-mode-btn" class="layout-toggle-btn" title="Toggle Focus Mode (Collapse Left Pane)">🔍 Focus Mode</button>
+            <span class="sandbox-status-pill">● Sandbox Active</span>
+        </div>
+    </header>
+
+    <div class="workspace">
+        <!-- LEFT PANEL: Description, Editorial, Solution Concepts & Dynamic Inputs -->
+        <aside class="workspace-pane left-pane glass-panel">
+            <div class="lc-tab-bar">
+                <button class="lc-tab active" id="tab-btn-description" data-pane="pane-description">📝 Description</button>
+                <button class="lc-tab" id="tab-btn-editorial" data-pane="pane-editorial">💡 Editorial</button>
+                <button class="lc-tab" id="tab-btn-solutions" data-pane="pane-solutions">🔍 Concepts</button>
+                <button class="lc-tab" id="tab-btn-analysis" data-pane="pane-analysis">📊 AI Analysis</button>
+            </div>
+            
+            <div class="pane-scroll-container">
+                <!-- Tab Pane: Description -->
+                <div id="pane-description" class="tab-pane-content">
+                    <div id="problem-header" class="problem-header">
+                        <h1 id="problem-title">DSA Visualizer</h1>
+                        <div class="problem-tags">
+                            <span id="problem-difficulty" class="difficulty-badge" style="display: none;"></span>
+                            <span class="problem-tag">Concepts</span>
+                            <span class="problem-tag">Dry Run</span>
+                        </div>
+                    </div>
+                    
+                    <div id="problem-description" class="problem-description-content">
+                        <!-- Populated Dynamically -->
+                    </div>
+
+                    <div class="pane-divider"></div>
+
+                    <!-- Control Forms Section (Moved to Description) -->
+                    <section class="left-forms-section">
+                        <h3 class="subsection-title">🛠️ Input Configuration</h3>
+                        
+                        <div class="input-group">
+                            <label for="leetcode-url">Import from LeetCode URL</label>
+                            <div class="import-flex">
+                                <input type="text" id="leetcode-url" placeholder="https://leetcode.com/problems/...">
+                                <button id="import-lc-btn" class="control-btn accent-btn">Fetch</button>
+                            </div>
+                            <div id="lc-import-notice" class="lc-import-notice hidden" role="status"></div>
+                        </div>
+
+                        <div id="template-select-group" class="input-group">
+                            <label for="algo-select">Choose pre-loaded Template</label>
+                            <select id="algo-select">
+                                <option value="" disabled selected>-- Select a Template --</option>
+                                <option value="nge">Next Greater Element (Monotonic Stack)</option>
+                                <option value="daily_temperatures">Daily Temperatures (Monotonic Stack)</option>
+                                <option value="tree_preorder">Binary Tree Preorder Traversal (Tree DFS)</option>
+                                <option value="grid_dfs">2D Grid Island Traversal (Matrix DFS)</option>
+                                <option value="list_reverse">Reverse Linked List (Linked List)</option>
+                                <option value="heap_top_k">Top K Elements (Priority Heap)</option>
+                                <option value="hashmap_two_sum">Two Sum (Hash Map)</option>
+                                <option value="binary_search">Binary Search (Two Pointers)</option>
+                                <option value="sliding_window_max">Sliding Window Maximum (Deque)</option>
+                                <option value="valid_parentheses">Valid Parentheses (Stack)</option>
+                                <option value="graph_bfs">Graph BFS (Adjacency)</option>
+                                <option value="twopointer_container">Container With Most Water (Two Pointers)</option>
+                            </select>
+                        </div>
+
+                        <div class="input-group">
+                            <label for="array-input">Test Case Input (array, grid, or edges)</label>
+                            <input type="text" id="array-input" value="" placeholder="e.g. 4,2,5 or [[0,1],[1,2]]">
+                        </div>
+
+                        <!-- Collapsible advanced batch testcases -->
+                        <details class="advanced-inputs-details">
+                            <summary>📁 Advanced Batch Test Cases</summary>
+                            <div class="input-group" style="margin-top: 10px;">
+                                <label for="test-cases-input">Batch test cases (one per line):</label>
+                                <textarea id="test-cases-input" rows="3" placeholder="4, 2, 5&#10;1, 2, 3"></textarea>
+                            </div>
+                        </details>
+
+                        <div class="action-row" style="margin-top: 15px;">
+                            <button id="run-all-btn" class="control-btn" style="flex: 1;">Run all cases</button>
+                            <button id="demo-btn" class="control-btn" style="flex: 1;">Load demo trace</button>
+                        </div>
+
+                        <!-- Loaders & Indicators -->
+                        <div id="instrument-status" class="status-indicator hidden"></div>
+                        <div id="loading-spinner" class="spinner hidden">⚡ Compiling Sandbox & Generating AI Commentary...</div>
+                        <div id="diagnostics-output"></div>
+                        
+                        <div id="batch-progress-container" class="hidden" style="margin-top:10px;">
+                            <div class="batch-status-text">Running Test Cases...</div>
+                            <div class="progress-bar-bg">
+                                <div id="batch-progress-bar" class="progress-bar-fill"></div>
+                            </div>
+                        </div>
+
+                        <div id="test-case-tabs" class="test-case-tabs hidden" role="tablist"></div>
+
+                        <!-- AI Diagnostics Panel -->
+                        <div id="diagnostics-panel" class="diagnostics-panel hidden">
+                            <div class="diagnostics-header">⚠️ Sandbox Compilation Failed</div>
+                            <div id="diagnostics-explanation" class="diagnostics-explanation"></div>
+                            <button id="one-click-fix-btn" class="one-click-fix-btn">✨ Apply AI Corrected Fix</button>
+                        </div>
+
+                        <!-- AI Suggested Edge Cases -->
+                        <div id="edge-cases-panel" class="edge-cases-panel hidden">
+                            <h4>💡 AI Suggested Edge Cases</h4>
+                            <div id="edge-cases-container" class="edge-cases-container"></div>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- Tab Pane: Editorial -->
+                <div id="pane-editorial" class="tab-pane-content hidden">
+                    <div class="editorial-header">
+                        <h2>💡 Solution Strategy & Intuition</h2>
+                    </div>
+                    <div id="problem-editorial" class="problem-editorial-content">
+                        <!-- Populated Dynamically -->
+                    </div>
+                </div>
+
+                <!-- Tab Pane: Solutions / Concepts -->
+                <div id="pane-solutions" class="tab-pane-content hidden">
+                    <div id="lc-concepts-panel" class="lc-concepts-panel">
+                        <label class="section-label">Select a Solution Concept to Visualize:</label>
+                        <div id="lc-concepts-container" class="lc-concepts-container">
+                            <div class="no-concepts-placeholder">No alternative concepts loaded yet. Import a LeetCode problem above to see AI concept cards!</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab Pane: AI Analysis -->
+                <div id="pane-analysis" class="tab-pane-content hidden">
+                    <!-- ANALYTICS PANEL (Extra depth details below animations) -->
+                    <section id="post-analysis-area" class="post-analysis-area">
+                        <!-- Recursive Call Stack Visualizer -->
+                        <div id="recursive-stack-section" class="section recursive-stack-section hidden glass-panel">
+                            <h3>Recursive Call Stack (3D view)</h3>
+                            <div id="recursive-stack-container" class="recursive-stack-container"></div>
+                        </div>
+
+                        <!-- AI Big-O & Growth Curve Analyzer -->
+                        <div id="complexity-section" class="section complexity-section hidden glass-panel">
+                            <h3>AI Complexity Analysis</h3>
+                            <div class="complexity-grid">
+                                <div class="complexity-stat glass-panel">
+                                    <span class="label">Time Complexity</span>
+                                    <span id="time-complexity-value" class="value">O(?)</span>
+                                </div>
+                                <div class="complexity-stat glass-panel">
+                                    <span class="label">Space Complexity</span>
+                                    <span id="space-complexity-value" class="value">O(?)</span>
+                                </div>
+                            </div>
+                            <div class="complexity-details glass-panel">
+                                <h4>Bottlenecks & Dynamic Allocations</h4>
+                                <div id="complexity-bottlenecks"></div>
+                                <h4 style="margin-top: 15px; color: var(--neon-blue);">💡 AI Judge & Optimization Steering</h4>
+                                <div id="ai-judgement"></div>
+                            </div>
+                            <div class="complexity-chart-wrapper glass-panel">
+                                <h4>Interactive Growth Curve</h4>
+                                <svg id="complexity-chart" viewBox="0 0 400 200" width="100%" height="200"></svg>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+            </div>
+        </aside>
+
+        <!-- RIGHT PANEL: Split between Editor (top) and Visualizer (bottom) -->
+        <main class="workspace-pane right-pane">
+            
+            <!-- CODE PANEL (Top Half) -->
+            <section class="code-pane glass-panel">
+                <div class="pane-header">
+                    <div class="pane-header-title">
+                        <span class="editor-icon">💻</span>
+                        <h3>Code Editor</h3>
+                    </div>
+                    <div class="header-actions" style="gap: 8px;">
+                        <button id="copy-code-btn" class="icon-btn" title="Copy Code">📋</button>
+                        <button id="reset-code-btn" class="icon-btn" title="Reset to Default Code">↺</button>
+                        <div class="divider"></div>
+                        <span class="editor-lang-badge">C++17</span>
+                        <label class="checkbox-label" title="Toggle AI Commentary" style="display:flex; align-items:center; gap:4px; margin-right:4px;">
+                            <input type="checkbox" id="skip-ai-checkbox" style="margin:0;"> AI On/Off
+                        </label>
+                        <button id="instrument-btn" class="leetcode-btn secondary-btn" title="Inject Visualizer SDK hooks">✨ Instrument</button>
+                        <button id="generate-btn" class="leetcode-btn primary-btn run-btn" title="Run and Generate Trace">▶ Run</button>
+                    </div>
+                </div>
+                
+                <div class="code-editor-wrapper">
+                    <textarea id="code-input" rows="6"></textarea>
+                    <div id="code-viewer-container" class="code-viewer-container hidden"></div>
+                </div>
+            </section>
+
+            <!-- VISUALIZER PANEL (Bottom Half) -->
+            <section class="visualizer-pane glass-panel">
+                <div class="pane-header">
+                    <div class="pane-header-title">
+                        <span class="visualizer-icon">📊</span>
+                        <h3>Visualizer Animation</h3>
+                    </div>
+                </div>
+                
+                <div class="visualizer-scroll-container">
+                    <div class="visualizer-area">
+                        <div id="array-section" class="section array-section">
+                            <h3>Input Array</h3>
+                            <div id="array-container" class="array-container"></div>
+                        </div>
+
+                        <div id="stack-section" class="section stack-section hidden">
+                            <h3 id="stack-header">Stack</h3>
+                            <div id="stack-container" class="stack-container"></div>
+                        </div>
+
+                        <div id="tree-section" class="section tree-section hidden">
+                            <h3>Binary Tree</h3>
+                            <div id="tree-container" class="tree-container"></div>
+                        </div>
+
+                        <div id="grid-section" class="section grid-section hidden">
+                            <h3>2D Grid / Matrix</h3>
+                            <div id="grid-container" class="grid-container"></div>
+                        </div>
+
+                        <div id="list-section" class="section list-section hidden">
+                            <h3>Linked List</h3>
+                            <div id="list-container" class="list-container"></div>
+                        </div>
+
+                        <div id="heap-section" class="section heap-section hidden">
+                            <h3>Priority Heap</h3>
+                            <div id="heap-container" class="heap-container"></div>
+                        </div>
+
+                        <div id="map-section" class="section map-section hidden">
+                            <h3>Hash Map</h3>
+                            <div id="map-container" class="map-container"></div>
+                        </div>
+
+                        <div id="graph-section" class="section graph-section hidden">
+                            <h3>Graph</h3>
+                            <div id="graph-container" class="graph-container"></div>
+                        </div>
+                    </div>
+
+                    <!-- Player Navigation HUD -->
+                    <div class="controls-area player-controls glass-panel">
+                        <div id="message-box" class="message-box">
+                            Press "Next" to start visualizing.
+                        </div>
+                        
+                        <div class="step-scrubber-row">
+                            <label for="step-slider" class="scrubber-label">Step</label>
+                            <div class="scrubber-container">
+                                <div id="timeline-heatmap" class="timeline-heatmap"></div>
+                                <input type="range" id="step-slider" class="step-slider" min="0" max="0" value="0" disabled>
+                            </div>
+                        </div>
+
+                        <details id="step-list-panel" class="step-list-panel hidden">
+                            <summary>Step list</summary>
+                            <ol id="step-list" class="step-list"></ol>
+                        </details>
+
+                        <div class="player-controls-minimal">
+                            <div class="minimal-left">
+                                <button id="prev-btn" class="icon-btn control-btn-mini" disabled title="Previous Step">⏮</button>
+                                <button id="autoplay-btn" class="icon-btn control-btn-mini autoplay-btn" disabled title="Auto-play">▶️</button>
+                                <button id="next-btn" class="icon-btn control-btn-mini" title="Next Step">⏭</button>
+                                <span id="step-counter" class="minimal-counter">Step: 0 / 0</span>
+                            </div>
+                            
+                            <div class="minimal-right">
+                                <label for="autoplay-speed" class="speed-label" style="display:none;">Speed:</label>
+                                <select id="autoplay-speed" class="speed-select-minimal" title="Playback Speed">
+                                    <option value="500">0.5s</option>
+                                    <option value="1000" selected>1.0s</option>
+                                    <option value="2000">2.0s</option>
+                                </select>
+                                <button id="download-json-btn" class="icon-btn control-btn-mini download-json-btn" disabled title="Download JSON">💾</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+
+        </main>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
