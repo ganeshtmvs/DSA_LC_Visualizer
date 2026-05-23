@@ -275,7 +275,7 @@ async function fetchTrace(code, arrayStr, skipAI, sessionId, attempt) {
     };
     const parsed = parseTestInput(arrayStr);
     let preparedCode = injectGraphAdjacency(code, parsed.graphNodes, parsed.graphEdges);
-    const { array, is2D, isGraph, graphNodes, graphEdges } = parsed;
+    const { array, multiArgs, is2D, isGraph, graphNodes, graphEdges } = parsed;
 
     if (!isGraph && (!array || array.length === 0)) {
         throw new Error('Invalid test input. Use: 4, 2, 5 | [[1,0],[0,1]] | [[0,1],[1,2]] graph edges | 4; 0,1; 0,2');
@@ -290,6 +290,7 @@ async function fetchTrace(code, arrayStr, skipAI, sessionId, attempt) {
         body: JSON.stringify({
             code: preparedCode,
             array: isGraph ? graphEdges : array,
+            multiArgs: multiArgs,
             is2D,
             isGraph,
             graphNodes: isGraph ? graphNodes : undefined,
@@ -1631,7 +1632,34 @@ function parseTestInput(arrayStr) {
     let isGraph = false;
     let graphNodes = 0;
     let graphEdges = [];
+    let multiArgs = null;
     const trimmed = arrayStr.trim();
+    
+    // Check for multiArgs
+    try {
+        const lines = trimmed.split('\n').map(l => l.trim()).filter(Boolean);
+        if (lines.length > 1 && !trimmed.startsWith('[[')) {
+            let allParsed = true;
+            let args = [];
+            for (let line of lines) {
+                try {
+                    let cleanLine = line.replace(/'/g, '"').replace(/\bnull\b/ig, 'null');
+                    try {
+                        args.push(JSON.parse(cleanLine));
+                    } catch (e1) {
+                        args.push(JSON.parse('[' + cleanLine + ']'));
+                    }
+                } catch (e) {
+                    allParsed = false;
+                    break;
+                }
+            }
+            if (allParsed) {
+                return { array: args[0], multiArgs: args, is2D: false, isGraph: false, graphNodes: 0, graphEdges: [] };
+            }
+        }
+    } catch(e) {}
+
 
     // Robust check for string literals (e.g. "abcabcbb" or 'abcabcbb' or just a word abcabcbb)
     const unwrapped = trimmed.replace(/^['"]|['"]$/g, '');
@@ -1651,7 +1679,7 @@ function parseTestInput(arrayStr) {
             if (pair.length === 2 && !pair.some(Number.isNaN)) graphEdges.push(pair);
         }
         array = graphEdges;
-        return { array, is2D, isGraph, graphNodes, graphEdges };
+        return { array, multiArgs, is2D, isGraph, graphNodes, graphEdges };
     }
 
     try {

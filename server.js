@@ -205,8 +205,11 @@ app.post('/leetcode', async (req, res) => {
         const systemPrompt = `You are a world-class DSA professor.
 You are given a LeetCode problem description, C++ starter snippet, and example test cases.
 Your task is to identify 2 to 4 distinct conceptual approaches (e.g. Naive Brute Force, Monotonic Stack, Two Pointers, Hash Map, Binary Search, Heap) that are commonly used to solve this problem.
+You must also examine the C++ function signature and the Example Test Cases, and extract EXACTLY the first example test case properly formatted as an array input string. If the function takes multiple parameters (e.g. nums1, nums2), format them on separate lines (e.g. "[1, 3]\\n[2]"). If it's a grid, format as "[[...], [...]]". If it's a string, format as "abc".
+
 Return a valid JSON object matching the following structure:
 {
+  "array": "The properly formatted first example testcase (e.g. '2,7,11,15' or '[1,3]\\n[2]')",
   "concepts": [
     {
       "id": "A unique lowercase id like brute_force, monotonic_stack, etc.",
@@ -248,7 +251,7 @@ Example Test Case: ${question.exampleTestcases}`;
             difficulty: question.difficulty,
             content: question.content,
             cppSnippet: cppSnippet,
-            array: firstTest,
+            array: result.array || "",
             concepts: result.concepts || []
         };
         
@@ -851,6 +854,11 @@ void resolve_impl(const string& label, double resolvedValue, int line = 0) {
     stepCount++;
     check_step_limit();
     cout << "{\\\"step\\\":" << stepCount << ",\\\"action\\\":\\\"resolve\\\",\\\"label\\\":\\\"" << label << "\\\",\\\"value\\\":" << resolvedValue << ",\\\"line\\\":" << line << "}," << endl;
+}
+void resolve_impl(int idx, double resolvedValue, int line = 0) {
+    stepCount++;
+    check_step_limit();
+    cout << "{\\\"step\\\":" << stepCount << ",\\\"action\\\":\\\"resolve\\\",\\\"index\\\":" << idx << ",\\\"resolvedValue\\\":" << resolvedValue << ",\\\"line\\\":" << line << "}," << endl;
 }
 void resolve_impl(int idx, int resolvedValue, int line = 0) {
     stepCount++;
