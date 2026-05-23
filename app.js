@@ -10,6 +10,95 @@ const API_BASE = window.location.origin;
 const LS_SKIP_AI = 'dsa-viz-skip-ai';
 const LS_AUTOPLAY_SPEED = 'dsa-viz-autoplay-speed';
 
+// ── LLM provider/model helpers ──────────────────────────────────
+function getLLMOpts() {
+    const providerEl = document.getElementById('llm-provider-select');
+    const modelEl = document.getElementById('llm-model-select');
+    return {
+        provider: providerEl ? providerEl.value : '',
+        model:    modelEl    ? modelEl.value    : '',
+    };
+}
+
+async function loadProviders() {
+    try {
+        const res = await fetch(`${API_BASE}/llm/providers`);
+        if (!res.ok) return;
+        const providers = await res.json();
+
+        const providerSel = document.getElementById('llm-provider-select');
+        const modelSel    = document.getElementById('llm-model-select');
+        const keyHint     = document.getElementById('llm-key-hint');
+        const keyTooltip  = document.getElementById('llm-key-tooltip');
+        if (!providerSel || !modelSel) return;
+
+        // Populate provider dropdown
+        providerSel.innerHTML = '<option value="">Auto</option>';
+        providers.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.id;
+            opt.textContent = p.label + (p.available ? '' : ' ⚠');
+            providerSel.appendChild(opt);
+        });
+
+        function updateModels() {
+            const selectedId = providerSel.value;
+            const provider = providers.find(p => p.id === selectedId);
+
+            modelSel.innerHTML = '<option value="">Default</option>';
+            if (provider) {
+                provider.models.forEach(m => {
+                    const opt = document.createElement('option');
+                    opt.value = m.id;
+                    opt.textContent = m.label;
+                    modelSel.appendChild(opt);
+                });
+
+                if (keyHint && !provider.available) {
+                    keyHint.classList.remove('hidden');
+                    if (keyTooltip) keyTooltip.textContent = `Set ${provider.id.toUpperCase()}_API_KEY in .env to use this provider`;
+                } else if (keyHint) {
+                    keyHint.classList.add('hidden');
+                }
+            } else {
+                if (keyHint) keyHint.classList.add('hidden');
+            }
+        }
+
+        providerSel.addEventListener('change', updateModels);
+        updateModels();
+    } catch (e) {
+        console.warn('Could not load LLM providers:', e.message);
+    }
+}
+
+// ── Dynamic Template loading ─────────────────────────────────────
+let templates = {};
+
+async function loadTemplates() {
+    try {
+        const res = await fetch(`${API_BASE}/templates`);
+        if (!res.ok) return;
+        const list = await res.json();
+
+        templates = {};
+        list.forEach(t => { templates[t.key] = t; });
+
+        const sel = document.getElementById('algo-select');
+        if (!sel) return;
+        sel.innerHTML = '<option value="" disabled selected>-- Select a Template --</option>';
+        list.forEach(t => {
+            const opt = document.createElement('option');
+            opt.value = t.key;
+            opt.textContent = `${t.title} (${t.category || t.difficulty || ''})`;
+            sel.appendChild(opt);
+        });
+    } catch (e) {
+        console.warn('Could not load templates:', e.message);
+    }
+}
+
+
 // Prebuilt demo trace (no backend required)
 const DEMO_TRACE = {
     array: [4, 2, 5],
@@ -184,7 +273,8 @@ async function fetchTrace(code, arrayStr, skipAI, sessionId, attempt) {
             sessionId: sessionId,
             attempt: attempt,
             title: window.currentProblemTitle || "Custom Problem",
-            content: window.currentProblemContent || ""
+            content: window.currentProblemContent || "",
+            ...getLLMOpts()
         })
     });
 
@@ -2330,8 +2420,11 @@ async function fetchEdgeCaseSuggestions() {
 }
 
 loadPreferences();
-// Initial Render (Empty state)
 render();
+
+// Load dynamic data from server
+loadTemplates();
+loadProviders();
 
 // Dynamic Problem metadata dictionary for pre-loaded templates
 const templateProblemInfo = {

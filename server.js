@@ -13,9 +13,8 @@ app.use(express.static(__dirname));
 
 const PORT = process.env.PORT || 3005;
 const EXEC_TIMEOUT_MS = 10000;
-const OLLAMA_URL = 'http://localhost:11434/api/generate';
-const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
-const GROQ_API_KEY = process.env.GROQ_API_KEY;
+const { runLLM, getProviderStatus } = require('./llm-router');
+
 
 const SYSTEM_PROMPT = `
 You are an expert algorithm explainer. 
@@ -125,60 +124,7 @@ function applyStepMessages(steps, messages) {
     });
 }
 
-// Unified LLM Query Helper supporting Ollama (llama3) and falling back to Groq
-async function runLLM(prompt, systemPrompt, formatJson = false) {
-    let responseText = "";
-    try {
-        const body = {
-            model: 'llama3',
-            prompt: prompt,
-            system: systemPrompt,
-            stream: false
-        };
-        if (formatJson) body.format = 'json';
-
-        const ollamaRes = await fetch(OLLAMA_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body)
-        });
-        if (!ollamaRes.ok) throw new Error("Ollama failed or not running");
-        const data = await ollamaRes.json();
-        responseText = data.response;
-        console.log("Successfully queried local Ollama (Llama 3)!");
-    } catch (e) {
-        console.log("Local Ollama not available or failed. Using Groq API fallback...");
-        if (!GROQ_API_KEY) {
-            throw new Error("No LLM key or Ollama available");
-        }
-        const body = {
-            model: 'llama-3.1-8b-instant',
-            messages: [
-                { role: "system", content: systemPrompt },
-                { role: "user", content: prompt }
-            ]
-        };
-        if (formatJson) {
-            body.response_format = { type: "json_object" };
-        }
-        const groqRes = await fetch(GROQ_API_URL, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${GROQ_API_KEY}`
-            },
-            body: JSON.stringify(body)
-        });
-        if (!groqRes.ok) {
-            const errData = await groqRes.json();
-            throw new Error(`Groq API Error: ${errData.error?.message || groqRes.statusText}`);
-        }
-        const data = await groqRes.json();
-        responseText = data.choices[0].message.content;
-        console.log("Successfully queried Groq API (llama-3.1-8b)!");
-    }
-    return responseText;
-}
+// runLLM is provided by llm-router.js (supports Ollama → Groq → OpenAI → Anthropic)
 
 function balanceBraces(code) {
     let openBraces = 0;
@@ -214,7 +160,7 @@ function balanceBraces(code) {
 
 app.post('/leetcode', async (req, res) => {
     try {
-        const { url } = req.body;
+        const { url, provider, model } = req.body;
         const match = url.match(/problems\/([^\/]+)/);
         if (!match) return res.status(400).json({ error: "Invalid LeetCode URL" });
         const titleSlug = match[1];
@@ -282,7 +228,7 @@ ${cppSnippet}
 Example Test Case: ${question.exampleTestcases}`;
 
         console.log(`Discovering solution concepts for LeetCode problem "${question.title}"...`);
-        const llmResponse = await runLLM(prompt, systemPrompt, true);
+        const llmResponse = await runLLM(prompt, systemPrompt, true, { provider, model });
         
         let result;
         try {
@@ -321,7 +267,9 @@ app.post('/leetcode/solve-concept', async (req, res) => {
             conceptId,
             conceptName,
             conceptSummary,
-            array
+            array,
+            provider,
+            model
         } = req.body;
 
         if (!title || !cppSnippet || !conceptId) {
@@ -416,7 +364,7 @@ ${cppSnippet}
 First sample input default: ${array}`;
 
         console.log(`Generating C++ solution for "${title}" using concept "${conceptName}"...`);
-        const llmResponse = await runLLM(prompt, systemPrompt, true);
+        const llmResponse = await runLLM(prompt, systemPrompt, true, { provider, model });
 
         let result;
         try {
@@ -1301,7 +1249,7 @@ The trace has exactly ${stepCount} steps. Your "messages" array MUST contain exa
 Return ONLY a JSON object with a single key "messages" containing an array of strings in order.
 `;
             try {
-                const responseText = await runLLM(userPrompt, SYSTEM_PROMPT, true);
+                const responseText = await runLLM(userPrompt, SYSTEM_PROMPT, true, { provider, model });
                 if (responseText) {
                     const cleanJson = responseText.replace(/```json/ig, '').replace(/```/g, '').trim();
                     const llmOutput = JSON.parse(cleanJson);
@@ -1335,7 +1283,7 @@ Return ONLY a JSON object with a single key "messages" containing an array of st
 
 app.post('/instrument', async (req, res) => {
     try {
-        const { code } = req.body;
+        const { code, provider, model } = req.body;
         if (!code) return res.status(400).json({ error: "Code is required" });
 
         let currentCode = code;
@@ -1572,32 +1520,7 @@ You MUST return a JSON object with exactly two keys:
 Return ONLY valid JSON. Absolutely no conversational filler or markdown blocks.`;
 
         const userPrompt = `USER CODE:\n${code}\n\nCOMPILER ERROR:\n${compilerError}`;
-        const responseText = await runLLM(userPrompt, systemPrompt, true);
-        const cleanJson = responseText.replace(/```json/ig, '').replace(/```/g, '').trim();
-        const result = JSON.parse(cleanJson);
-        res.json(result);
-    } catch (err) {
-        console.error("Diagnosis error:", err);
-        res.status(500).json({ error: "Failed to diagnose code", details: err.message });
-    }
-});
-
-app.post('/suggest-cases', async (req, res) => {
-    try {
-        const { code } = req.body;
-        if (!code) return res.status(400).json({ error: "Code is required" });
-        
-        const systemPrompt = `You are an expert algorithm educator.
-Given the C++ solution, propose 3 distinct, highly effective boundary test cases that are critical for verifying this algorithm.
-Each test case MUST have:
-1. "input": the raw test case input string (e.g. "4, 2, 5" for arrays, "[[0,1]]" for grids, etc.) that can be directly loaded into the visualizer input box.
-2. "title": a short name for the test case (e.g., "Sorted Input", "Duplicate Elements", "Empty/Single Value").
-3. "description": an explanation of why this edge case is a crucial boundary test.
-You MUST return a JSON object with a single key "cases" containing an array of exactly 3 objects.
-Return ONLY valid JSON. Absolutely no conversational filler or markdown blocks.`;
-
-        const userPrompt = `C++ CODE:\n${code}`;
-        const responseText = await runLLM(userPrompt, systemPrompt, true);
+        const responseText = await runLLM(userPrompt, systemPrompt, true, { provider, model });
         const cleanJson = responseText.replace(/```json/ig, '').replace(/```/g, '').trim();
         const result = JSON.parse(cleanJson);
         res.json(result);
@@ -1609,7 +1532,7 @@ Return ONLY valid JSON. Absolutely no conversational filler or markdown blocks.`
 
 app.post('/analyze-complexity', async (req, res) => {
     try {
-        const { code } = req.body;
+        const { code, provider, model } = req.body;
         if (!code) return res.status(400).json({ error: "Code is required" });
         
         const systemPrompt = `You are an expert performance engineer and coding interviewer.
@@ -1623,13 +1546,54 @@ You MUST return a JSON object with exactly five keys:
 Return ONLY valid JSON. Absolutely no conversational filler or markdown blocks.`;
 
         const userPrompt = `C++ CODE:\n${code}`;
-        const responseText = await runLLM(userPrompt, systemPrompt, true);
+        const responseText = await runLLM(userPrompt, systemPrompt, true, { provider, model });
         const cleanJson = responseText.replace(/```json/ig, '').replace(/```/g, '').trim();
         const result = JSON.parse(cleanJson);
         res.json(result);
     } catch (err) {
         console.error("Complexity analysis error:", err);
         res.status(500).json({ error: "Failed to analyze complexity", details: err.message });
+    }
+});
+
+// ── Provider info endpoint ──────────────────────────────────────
+app.get('/llm/providers', (_req, res) => {
+    res.json(getProviderStatus());
+});
+
+// ── Templates CRUD ──────────────────────────────────────────────
+const TEMPLATES_PATH = path.join(__dirname, 'templates.json');
+
+app.get('/templates', (_req, res) => {
+    try {
+        const data = fs.existsSync(TEMPLATES_PATH)
+            ? JSON.parse(fs.readFileSync(TEMPLATES_PATH, 'utf8'))
+            : [];
+        res.json(data);
+    } catch (e) {
+        res.status(500).json({ error: 'Failed to read templates', details: e.message });
+    }
+});
+
+app.post('/templates', (req, res) => {
+    try {
+        const data = fs.existsSync(TEMPLATES_PATH)
+            ? JSON.parse(fs.readFileSync(TEMPLATES_PATH, 'utf8'))
+            : [];
+        const incoming = req.body;
+        if (!incoming.key || !incoming.title) {
+            return res.status(400).json({ error: 'key and title are required' });
+        }
+        const idx = data.findIndex(t => t.key === incoming.key);
+        if (idx >= 0) {
+            data[idx] = { ...data[idx], ...incoming };
+        } else {
+            data.push(incoming);
+        }
+        fs.writeFileSync(TEMPLATES_PATH, JSON.stringify(data, null, 2));
+        res.json({ ok: true, key: incoming.key });
+    } catch (e) {
+        res.status(500).json({ error: 'Failed to save template', details: e.message });
     }
 });
 

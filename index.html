@@ -10,15 +10,27 @@
     <!-- Top Premium Navigation Bar -->
     <header class="app-header">
         <div class="header-logo">
-            <span class="logo-emoji">✨</span>
+            <div class="logo-mark">
+                <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+                    <rect width="28" height="28" rx="7" fill="url(#logoGrad)"/>
+                    <path d="M8 14L12 10L16 14L20 10" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M8 18L12 14L16 18L20 14" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity="0.5"/>
+                    <defs>
+                        <linearGradient id="logoGrad" x1="0" y1="0" x2="28" y2="28">
+                            <stop offset="0%" stop-color="#6366f1"/>
+                            <stop offset="100%" stop-color="#a78bfa"/>
+                        </linearGradient>
+                    </defs>
+                </svg>
+            </div>
             <div class="logo-text">
-                <h2>Antigravity Visualizer</h2>
-                <span>Premium AI-Powered Sandbox & Commentary</span>
+                <h2>DSA Visualizer</h2>
+                <span>AI-Powered Algorithm Sandbox</span>
             </div>
         </div>
         <div class="header-actions-top">
-            <button id="focus-mode-btn" class="layout-toggle-btn" title="Toggle Focus Mode (Collapse Left Pane)">🔍 Focus Mode</button>
-            <span class="sandbox-status-pill">● Sandbox Active</span>
+            <button id="focus-mode-btn" class="layout-toggle-btn" title="Toggle Focus Mode (Collapse Left Pane)">Focus Mode</button>
+            <span class="sandbox-status-pill"><span class="status-dot"></span>Sandbox Active</span>
         </div>
     </header>
 
@@ -71,19 +83,7 @@
                         <div id="template-select-group" class="input-group">
                             <label for="algo-select">Choose pre-loaded Template</label>
                             <select id="algo-select">
-                                <option value="" disabled selected>-- Select a Template --</option>
-                                <option value="nge">Next Greater Element (Monotonic Stack)</option>
-                                <option value="daily_temperatures">Daily Temperatures (Monotonic Stack)</option>
-                                <option value="tree_preorder">Binary Tree Preorder Traversal (Tree DFS)</option>
-                                <option value="grid_dfs">2D Grid Island Traversal (Matrix DFS)</option>
-                                <option value="list_reverse">Reverse Linked List (Linked List)</option>
-                                <option value="heap_top_k">Top K Elements (Priority Heap)</option>
-                                <option value="hashmap_two_sum">Two Sum (Hash Map)</option>
-                                <option value="binary_search">Binary Search (Two Pointers)</option>
-                                <option value="sliding_window_max">Sliding Window Maximum (Deque)</option>
-                                <option value="valid_parentheses">Valid Parentheses (Stack)</option>
-                                <option value="graph_bfs">Graph BFS (Adjacency)</option>
-                                <option value="twopointer_container">Container With Most Water (Two Pointers)</option>
+                                <option value="" disabled selected>Loading templates...</option>
                             </select>
                         </div>
 
@@ -218,11 +218,42 @@
                         <button id="reset-code-btn" class="icon-btn" title="Reset to Default Code">↺</button>
                         <div class="divider"></div>
                         <span class="editor-lang-badge">C++17</span>
-                        <label class="checkbox-label" title="Toggle AI Commentary" style="display:flex; align-items:center; gap:4px; margin-right:4px;">
-                            <input type="checkbox" id="skip-ai-checkbox" style="margin:0;"> AI On/Off
-                        </label>
                         <button id="instrument-btn" class="leetcode-btn secondary-btn" title="Inject Visualizer SDK hooks">✨ Instrument</button>
                         <button id="generate-btn" class="leetcode-btn primary-btn run-btn" title="Run and Generate Trace">▶ Run</button>
+                    </div>
+                </div>
+
+                <!-- AI Settings Toolbar -->
+                <div class="ai-settings-toolbar">
+                    <div class="ai-settings-left">
+                        <span class="ai-settings-icon">🤖</span>
+                        <span class="ai-settings-title">AI Settings</span>
+                    </div>
+                    <div class="ai-settings-controls">
+                        <div class="ai-field-group">
+                            <label class="ai-field-label" for="llm-provider-select">Provider</label>
+                            <div class="ai-provider-row">
+                                <select id="llm-provider-select" class="ai-field-select">
+                                    <option value="">Auto</option>
+                                </select>
+                                <span id="llm-key-hint" class="llm-key-hint hidden" aria-label="No API key configured">
+                                    ⚠
+                                    <span class="llm-key-tooltip" id="llm-key-tooltip"></span>
+                                </span>
+                            </div>
+                        </div>
+                        <div class="ai-field-divider"></div>
+                        <div class="ai-field-group">
+                            <label class="ai-field-label" for="llm-model-select">Model</label>
+                            <select id="llm-model-select" class="ai-field-select">
+                                <option value="">Default</option>
+                            </select>
+                        </div>
+                        <div class="ai-field-divider"></div>
+                        <label class="ai-toggle-label" title="Toggle AI Commentary">
+                            <input type="checkbox" id="skip-ai-checkbox" class="ai-toggle-checkbox">
+                            <span class="ai-toggle-text">AI Commentary</span>
+                        </label>
                     </div>
                 </div>
                 
