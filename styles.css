@@ -2244,10 +2244,17 @@ body {
     display: flex;
     flex-direction: column;
 }
+.CodeMirror {
+    flex: 1;
+    height: 100%;
+    font-family: 'Fira Code', monospace;
+    font-size: 14px;
+}
 #code-input {
     flex: 1;
     resize: none;
     overflow-y: auto;
+    display: none; /* Hidden when CodeMirror takes over */
 }
 .code-viewer-container {
     flex: 1;

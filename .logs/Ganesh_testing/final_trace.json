@@ -1,0 +1,136 @@
+{
+  "steps": [
+    {
+      "step": 0,
+      "action": "focus_array",
+      "index": 0,
+      "value": 1,
+      "message": "The algorithm starts by focusing on the first element of the array, which is at index 0 and has a value of 1."
+    },
+    {
+      "step": 0,
+      "action": "focus_array",
+      "index": 1,
+      "value": 3,
+      "message": "Next, the algorithm focuses on the second element of the array, which is at index 1 and has a value of 3."
+    },
+    {
+      "step": 1,
+      "action": "focus_array",
+      "index": 0,
+      "value": 1,
+      "line": 444,
+      "userLine": 11,
+      "message": "The algorithm repeats the action of focusing on the first element of the array, which is at index 0 and has a value of 1, at the specified line of code."
+    },
+    {
+      "step": 2,
+      "action": "focus_array",
+      "index": 1,
+      "value": 3,
+      "line": 445,
+      "userLine": 12,
+      "message": "The algorithm then focuses on the second element of the array again, which is at index 1 and has a value of 3, at the specified line of code."
+    },
+    {
+      "step": 3,
+      "action": "compare",
+      "stackTopIndex": -2147483648,
+      "stackTopValue": -2147483648,
+      "arrayIndex": 2147483647,
+      "arrayValue": 2147483647,
+      "line": 452,
+      "userLine": 19,
+      "message": "The algorithm compares the top value of the stack, which is unknown, with the value at the last index of the array, which is also unknown."
+    },
+    {
+      "step": 4,
+      "action": "compare",
+      "stackTopIndex": 3,
+      "stackTopValue": 3,
+      "arrayIndex": 1,
+      "arrayValue": 3,
+      "line": 453,
+      "userLine": 20,
+      "message": "The algorithm compares the top value of the stack, which is 3, with the value at index 1 of the array, which is also 3."
+    },
+    {
+      "step": 5,
+      "action": "focus_pointer",
+      "label": "left",
+      "index": 0,
+      "value": 1,
+      "line": 467,
+      "userLine": 34,
+      "message": "The algorithm shifts its focus to the left pointer, which is pointing to the first element of the array, at index 0 and with a value of 1."
+    },
+    {
+      "step": 6,
+      "action": "focus_pointer",
+      "label": "right",
+      "index": 0,
+      "value": 1,
+      "line": 468,
+      "userLine": 35,
+      "message": "The algorithm then shifts its focus to the right pointer, which is pointing to the first element of the array, at index 0 and with a value of 1."
+    },
+    {
+      "step": 7,
+      "action": "focus_array",
+      "index": 1,
+      "value": 3,
+      "line": 444,
+      "userLine": 11,
+      "message": "The algorithm re-focuses on the second element of the array again, which is at index 1 and has a value of 3."
+    },
+    {
+      "step": 8,
+      "action": "focus_array",
+      "index": 1,
+      "value": 3,
+      "line": 445,
+      "userLine": 12,
+      "message": "The algorithm repeats the action of focusing on the second element of the array, at index 1 and with a value of 3, at the specified line of code."
+    },
+    {
+      "step": 9,
+      "action": "compare",
+      "stackTopIndex": 1,
+      "stackTopValue": 3,
+      "arrayIndex": 3,
+      "arrayValue": 3,
+      "line": 452,
+      "userLine": 19,
+      "message": "The algorithm compares the top value of the stack, which is 3, with the value at index 3 of the array, which is also 3."
+    },
+    {
+      "step": 10,
+      "action": "compare",
+      "stackTopIndex": -2147483648,
+      "stackTopValue": -2147483648,
+      "arrayIndex": 2147483647,
+      "arrayValue": 2147483647,
+      "line": 453,
+      "userLine": 20,
+      "message": "The algorithm performs another comparison, where the top value of the stack and the value at the last index of the array are unknown."
+    },
+    {
+      "step": 11,
+      "action": "resolve",
+      "index": 1,
+      "resolvedValue": 2,
+      "line": 456,
+      "userLine": 23,
+      "message": "The algorithm resolves the value at index 1, determining that it should actually be 2."
+    },
+    {
+      "step": 999,
+      "action": "finish",
+      "message": "The algorithm has finished executing."
+    }
+  ],
+  "array": [
+    1,
+    3
+  ]
+}

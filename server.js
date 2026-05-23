@@ -160,7 +160,7 @@ function balanceBraces(code) {
 
 app.post('/leetcode', async (req, res) => {
     try {
-        const { url, provider, model } = req.body;
+        const { url, provider, model, sessionId } = req.body;
         const match = url.match(/problems\/([^\/]+)/);
         if (!match) return res.status(400).json({ error: "Invalid LeetCode URL" });
         const titleSlug = match[1];
@@ -250,7 +250,19 @@ Example Test Case: ${question.exampleTestcases}`;
             cppSnippet: cppSnippet,
             array: firstTest,
             concepts: result.concepts || []
-        });
+        };
+        
+        // Log the fetched problem if a session ID is provided
+        if (sessionId) {
+            const safeSessionId = sessionId.replace(/[^a-zA-Z0-9_-]/g, '_');
+            const sessionDir = path.join(__dirname, '.logs', safeSessionId);
+            if (!fs.existsSync(sessionDir)) {
+                fs.mkdirSync(sessionDir, { recursive: true });
+            }
+            fs.writeFileSync(path.join(sessionDir, 'problem.json'), JSON.stringify(responseData, null, 2));
+        }
+
+        res.json(responseData);
     } catch (error) {
         console.error("LeetCode fetch/concepts error:", error);
         res.status(500).json({ error: "Failed to fetch problem details from LeetCode" });

@@ -147,6 +147,31 @@ const resetCodeBtn = document.getElementById('reset-code-btn');
 const skipAiCheckbox = document.getElementById('skip-ai-checkbox');
 const lcImportNotice = document.getElementById('lc-import-notice');
 const stepSlider = document.getElementById('step-slider');
+
+// CodeMirror Setup
+let cmEditor = null;
+if (codeInput) {
+    cmEditor = CodeMirror.fromTextArea(codeInput, {
+        mode: 'text/x-c++src',
+        theme: 'dracula',
+        lineNumbers: true,
+        matchBrackets: true,
+        indentUnit: 4,
+        viewportMargin: Infinity
+    });
+}
+
+function getCode() {
+    return cmEditor ? cmEditor.getValue() : codeInput.value;
+}
+
+function setCode(val) {
+    if (cmEditor) {
+        cmEditor.setValue(val || '');
+    } else if (codeInput) {
+        codeInput.value = val || '';
+    }
+}
 const stepListPanel = document.getElementById('step-list-panel');
 const stepListEl = document.getElementById('step-list');
 const testCasesInput = document.getElementById('test-cases-input');
@@ -1272,7 +1297,7 @@ algoSelect.addEventListener('change', (e) => {
 
     if (!val) {
         arrayInput.value = '';
-        codeInput.value = '';
+        setCode();
         const titleEl = document.getElementById('problem-title');
         if (titleEl) titleEl.innerText = 'DSA Visualizer';
         animationData = null;
@@ -1283,7 +1308,7 @@ algoSelect.addEventListener('change', (e) => {
 
     if (templates[val]) {
         arrayInput.value = templates[val].array;
-        codeInput.value = templates[val].cleanCode || templates[val].code;
+        setCode();
         window.instrumentedCode = templates[val].code;
         const titleEl = document.getElementById('problem-title');
         if (titleEl && templates[val].title) {
@@ -1366,7 +1391,7 @@ importLcBtn.addEventListener('click', async () => {
 
     // Set editor/message placeholders immediately to prevent racing compilation
     if (codeInput) {
-        codeInput.value = '// Discovering problem and generating solution approach...';
+        setCode();
     }
     if (messageBox) {
         messageBox.innerHTML = '<span class="loading-dots" style="color: var(--neon-blue);">AI is formulating optimal solution concepts & instrumented traces...</span>';
@@ -1387,7 +1412,7 @@ importLcBtn.addEventListener('click', async () => {
         const response = await fetch(`${API_BASE}/leetcode`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url })
+            body: JSON.stringify({ url, ...getLLMOpts(), sessionId: sessionIdInput ? sessionIdInput.value.trim() : '' })
         });
 
         if (!response.ok) {
@@ -1461,7 +1486,7 @@ importLcBtn.addEventListener('click', async () => {
 
         // 1. Populate standard default Array Input and C++ snippet immediately
         if (data.cppSnippet) {
-            codeInput.value = data.cppSnippet;
+            setCode();
             window.originalCppSnippet = data.cppSnippet;
         }
         if (data.array) {
@@ -1538,7 +1563,9 @@ importLcBtn.addEventListener('click', async () => {
                                     conceptId: c.id,
                                     conceptName: c.name,
                                     conceptSummary: c.summary,
-                                    array: data.array || arrayInput.value
+                                    array: data.array || arrayInput.value,
+                                    sessionId: sessionIdInput ? sessionIdInput.value.trim() : '',
+                                    ...getLLMOpts()
                                 })
                             });
 
@@ -1551,7 +1578,7 @@ importLcBtn.addEventListener('click', async () => {
 
                             // Load C++ code to editor
                             if (solveData.code) {
-                                codeInput.value = solveData.code;
+                                setCode();
                             }
                             // Do not set window.instrumentedCode here. The code needs to be sent to /generate for auto-instrumentation.
                             window.instrumentedCode = '';
@@ -1710,6 +1737,20 @@ function parseTestInput(arrayStr) {
         }).filter((x) => x !== undefined && (!Number.isNaN(x) || x === null));
     }
 
+    if (window.isGraphProblem && is2D) {
+        // Automatically convert [[0,1],[1,2]] to graph format
+        isGraph = true;
+        is2D = false;
+        graphEdges = array;
+        let maxNode = 0;
+        graphEdges.forEach(edge => {
+            if (edge.length >= 2) {
+                maxNode = Math.max(maxNode, edge[0], edge[1]);
+            }
+        });
+        graphNodes = maxNode + 1;
+    }
+
     return { array, is2D, isGraph, graphNodes, graphEdges };
 }
 
@@ -1730,12 +1771,18 @@ if (instrumentBtn) {
         });
     }
 
-    codeInput.addEventListener('input', () => {
-        window.instrumentedCode = null;
-    });
+    if (cmEditor) {
+        cmEditor.on('change', () => {
+            window.instrumentedCode = null;
+        });
+    } else {
+        codeInput.addEventListener('input', () => {
+            window.instrumentedCode = null;
+        });
+    }
 
     instrumentBtn.addEventListener('click', async () => {
-        const code = codeInput.value.trim();
+        const code = getCode().trim();
         if (!code) {
             alert('Please paste some raw C++ code first to auto-instrument.');
             return;
@@ -1750,20 +1797,21 @@ if (instrumentBtn) {
         instrumentStatus.innerHTML = '✨ AI Auto-Instrumenting & Verifying in C++ Sandbox... (Might take up to 20s if compiling retries are needed)';
 
         try {
-            const res = await fetch('http://localhost:3005/instrument', {
+            const res = await fetch(`${API_BASE}/instrument`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     code,
                     title: window.currentProblemTitle || "Custom Problem",
-                    content: window.currentProblemContent || ""
+                    content: window.currentProblemContent || "",
+                    ...getLLMOpts()
                 })
             });
 
             const data = await res.json();
             if (!res.ok || data.success === false) {
                 if (data && data.success === false) {
-                    codeInput.value = data.code; // Original code preserved
+                    setCode(); // Original code preserved
                     instrumentStatus.classList.remove('loading');
                     instrumentStatus.classList.add('error');
                     instrumentStatus.innerHTML = `
@@ -1808,8 +1856,8 @@ if (instrumentBtn) {
 
 if (copyCodeBtn) {
     copyCodeBtn.addEventListener('click', () => {
-        if (!codeInput.value) return;
-        navigator.clipboard.writeText(codeInput.value).then(() => {
+        if (!getCode()) return;
+        navigator.clipboard.writeText(getCode()).then(() => {
             const originalText = copyCodeBtn.innerText;
             copyCodeBtn.innerText = '✅';
             setTimeout(() => {
@@ -1825,13 +1873,13 @@ if (resetCodeBtn) {
     resetCodeBtn.addEventListener('click', () => {
         if (algoSelect && algoSelect.value && templates[algoSelect.value]) {
             if (confirm('Reset to original template code? All changes will be lost.')) {
-                codeInput.value = templates[algoSelect.value].cleanCode || templates[algoSelect.value].code;
+                setCode();
                 window.instrumentedCode = templates[algoSelect.value].code;
                 if (typeof buildCodeViewer === 'function') buildCodeViewer();
             }
         } else if (window.originalCppSnippet) {
             if (confirm('Are you sure you want to reset the code to the original snippet? All changes will be lost.')) {
-                codeInput.value = window.originalCppSnippet;
+                setCode();
                 window.instrumentedCode = null; // Clear auto-instrumented cache so it uses the clean code on next run
                 if (typeof buildCodeViewer === 'function') buildCodeViewer();
             }
@@ -1842,7 +1890,7 @@ if (resetCodeBtn) {
 }
 
 generateBtn.addEventListener('click', async () => {
-    const code = window.instrumentedCode || codeInput.value.trim();
+    const code = window.instrumentedCode || getCode().trim();
     const arrayStr = arrayInput.value.trim();
 
     if (!code || !arrayStr) {
@@ -1902,8 +1950,9 @@ generateBtn.addEventListener('click', async () => {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        code: codeInput.value,
+                        code: getCode(),
                         compilerError: error.message,
+                        ...getLLMOpts(),
                         title: window.currentProblemTitle || "Custom Problem",
                         content: window.currentProblemContent || ""
                     })
@@ -1919,7 +1968,7 @@ generateBtn.addEventListener('click', async () => {
                 if (fixBtn && diagData.suggestedCode) {
                     fixBtn.classList.remove('hidden');
                     fixBtn.onclick = () => {
-                        codeInput.value = diagData.suggestedCode;
+                        setCode();
                         if (window.editor) window.editor.setValue(diagData.suggestedCode);
                         diagPanel.classList.add('hidden');
                         generateBtn.click();
@@ -1951,7 +2000,7 @@ generateBtn.addEventListener('click', async () => {
 
 if (runAllBtn) {
     runAllBtn.addEventListener('click', async () => {
-        const code = codeInput.value.trim();
+        const code = getCode().trim();
         const batchText = (testCasesInput?.value || '').trim();
         const lines = batchText
             ? batchText.split('\n').map((l) => l.trim()).filter(Boolean)
@@ -2108,7 +2157,7 @@ document.addEventListener('keydown', (e) => {
 
 // Premium visualizations: buildCodeViewer
 function buildCodeViewer() {
-    const code = codeInput.value;
+    const code = getCode();
     const container = document.getElementById('code-viewer-container');
     if (!container) return;
     container.innerHTML = '';
@@ -2315,7 +2364,7 @@ function renderComplexityChart(complexityType) {
 
 // Premium AI features: runAIComplexityAnalysis
 async function runAIComplexityAnalysis() {
-    const code = codeInput.value;
+    const code = getCode();
     const timeVal = document.getElementById('time-complexity-value');
     const spaceVal = document.getElementById('space-complexity-value');
     const bottlenecksEl = document.getElementById('complexity-bottlenecks');
@@ -2334,7 +2383,7 @@ async function runAIComplexityAnalysis() {
         const res = await fetch(`${API_BASE}/analyze-complexity`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ code })
+            body: JSON.stringify({ code, ...getLLMOpts() })
         });
         if (!res.ok) throw new Error("Complexity API call failed");
 
@@ -2359,7 +2408,7 @@ async function runAIComplexityAnalysis() {
 
 // Premium AI features: fetchEdgeCaseSuggestions
 async function fetchEdgeCaseSuggestions() {
-    const code = codeInput.value;
+    const code = getCode();
     const panel = document.getElementById('edge-cases-panel');
     const container = document.getElementById('edge-cases-container');
 
@@ -2372,7 +2421,7 @@ async function fetchEdgeCaseSuggestions() {
         const res = await fetch(`${API_BASE}/suggest-cases`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ code })
+            body: JSON.stringify({ code, ...getLLMOpts() })
         });
         if (!res.ok) throw new Error("Edge cases API call failed");
 
@@ -2672,7 +2721,7 @@ algoSelect.addEventListener('change', (e) => {
     const val = e.target.value;
     if (templates[val]) {
         arrayInput.value = templates[val].array;
-        codeInput.value = templates[val].cleanCode || templates[val].code;
+        setCode();
         window.instrumentedCode = templates[val].code;
         updateProblemMetadata(val);
 
