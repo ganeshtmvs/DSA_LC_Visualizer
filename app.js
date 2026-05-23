@@ -1235,7 +1235,7 @@ algoSelect.addEventListener('change', (e) => {
 
     if (!val) {
         arrayInput.value = '';
-        setCode();
+        setCode('');
         const titleEl = document.getElementById('problem-title');
         if (titleEl) titleEl.innerText = 'DSA Visualizer';
         animationData = null;
@@ -1246,7 +1246,7 @@ algoSelect.addEventListener('change', (e) => {
 
     if (templates[val]) {
         arrayInput.value = templates[val].array;
-        setCode();
+        setCode(templates[val].cleanCode || templates[val].code);
         window.instrumentedCode = templates[val].code;
         const titleEl = document.getElementById('problem-title');
         if (titleEl && templates[val].title) {
@@ -1329,7 +1329,7 @@ importLcBtn.addEventListener('click', async () => {
 
     // Set editor/message placeholders immediately to prevent racing compilation
     if (codeInput) {
-        setCode();
+        setCode('// Discovering problem and generating solution approach...');
     }
     if (messageBox) {
         messageBox.innerHTML = '<span class="loading-dots" style="color: var(--neon-blue);">AI is formulating optimal solution concepts & instrumented traces...</span>';
@@ -1424,7 +1424,7 @@ importLcBtn.addEventListener('click', async () => {
 
         // 1. Populate standard default Array Input and C++ snippet immediately
         if (data.cppSnippet) {
-            setCode();
+            setCode(data.cppSnippet);
             window.originalCppSnippet = data.cppSnippet;
         }
         if (data.array) {
@@ -1516,7 +1516,7 @@ importLcBtn.addEventListener('click', async () => {
 
                             // Load C++ code to editor
                             if (solveData.code) {
-                                setCode();
+                                setCode(solveData.code);
                             }
                             // Do not set window.instrumentedCode here. The code needs to be sent to /generate for auto-instrumentation.
                             window.instrumentedCode = '';
@@ -1592,9 +1592,8 @@ importLcBtn.addEventListener('click', async () => {
 
                             // Auto-trigger animation with the newly loaded code & array
                             if (messageBox) {
-                                messageBox.innerHTML = '<span class="loading-dots" style="color: var(--neon-blue);">Instrumenting and running visualizer...</span>';
+                                messageBox.innerHTML = '<span class="success-message">Code and tests loaded successfully! Press Run to execute.</span>';
                             }
-                            setTimeout(() => generateBtn.click(), 100);
 
                         } catch (err) {
                             console.error(err);
@@ -1749,7 +1748,7 @@ if (instrumentBtn) {
             const data = await res.json();
             if (!res.ok || data.success === false) {
                 if (data && data.success === false) {
-                    setCode(); // Original code preserved
+                    setCode(data.code); // Original code preserved
                     instrumentStatus.classList.remove('loading');
                     instrumentStatus.classList.add('error');
                     instrumentStatus.innerHTML = `
@@ -1811,13 +1810,13 @@ if (resetCodeBtn) {
     resetCodeBtn.addEventListener('click', () => {
         if (algoSelect && algoSelect.value && templates[algoSelect.value]) {
             if (confirm('Reset to original template code? All changes will be lost.')) {
-                setCode();
+                setCode(templates[algoSelect.value].cleanCode || templates[algoSelect.value].code);
                 window.instrumentedCode = templates[algoSelect.value].code;
                 if (typeof buildCodeViewer === 'function') buildCodeViewer();
             }
         } else if (window.originalCppSnippet) {
             if (confirm('Are you sure you want to reset the code to the original snippet? All changes will be lost.')) {
-                setCode();
+                setCode(window.originalCppSnippet);
                 window.instrumentedCode = null; // Clear auto-instrumented cache so it uses the clean code on next run
                 if (typeof buildCodeViewer === 'function') buildCodeViewer();
             }
@@ -1906,7 +1905,7 @@ generateBtn.addEventListener('click', async () => {
                 if (fixBtn && diagData.suggestedCode) {
                     fixBtn.classList.remove('hidden');
                     fixBtn.onclick = () => {
-                        setCode();
+                        setCode(diagData.suggestedCode);
                         if (window.editor) window.editor.setValue(diagData.suggestedCode);
                         diagPanel.classList.add('hidden');
                         generateBtn.click();
@@ -2659,7 +2658,7 @@ algoSelect.addEventListener('change', (e) => {
     const val = e.target.value;
     if (templates[val]) {
         arrayInput.value = templates[val].array;
-        setCode();
+        setCode(templates[val].cleanCode || templates[val].code);
         window.instrumentedCode = templates[val].code;
         updateProblemMetadata(val);
 
