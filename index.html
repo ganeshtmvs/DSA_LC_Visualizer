@@ -55,6 +55,11 @@
                         <h3 class="subsection-title">🛠️ Input Configuration</h3>
                         
                         <div class="input-group">
+                            <label for="session-id-input">Session ID (optional for debugging)</label>
+                            <input type="text" id="session-id-input" placeholder="e.g. Run_12345">
+                        </div>
+                        
+                        <div class="input-group">
                             <label for="leetcode-url">Import from LeetCode URL</label>
                             <div class="import-flex">
                                 <input type="text" id="leetcode-url" placeholder="https://leetcode.com/problems/...">
@@ -115,6 +120,15 @@
 
                         <div id="test-case-tabs" class="test-case-tabs hidden" role="tablist"></div>
 
+                        <!-- Execution Results Output -->
+                        <details id="execution-results-panel" class="hidden" style="margin-top: 15px; border: 1px solid var(--border); border-radius: 6px; padding: 10px; background: rgba(0,0,0,0.2);">
+                            <summary style="cursor: pointer; font-weight: 500; font-size: 13px; color: var(--text-secondary);">
+                                📊 Execution Results & Output
+                            </summary>
+                            <div id="execution-results-content" style="margin-top: 10px; font-family: var(--font-mono); font-size: 12px; color: var(--accent); white-space: pre-wrap;">
+                                No output yet.
+                            </div>
+                        </details>
                         <!-- AI Diagnostics Panel -->
                         <div id="diagnostics-panel" class="diagnostics-panel hidden">
                             <div class="diagnostics-header">⚠️ Sandbox Compilation Failed</div>

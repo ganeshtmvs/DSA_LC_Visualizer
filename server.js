@@ -3,6 +3,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
+const path = require('path');
 const { execSync } = require('child_process');
 
 const app = express();
@@ -471,9 +472,16 @@ app.post('/generate', async (req, res) => {
             graphNodes: reqGraphNodes,
             graphEdges: reqGraphEdges,
             noAI,
-            skipAI
+            skipAI,
+            sessionId = 'default',
+            attempt = 0
         } = req.body;
         const skipAi = noAI === true || skipAI === true;
+
+        const logDir = path.join(__dirname, '.logs', sessionId);
+        if (!fs.existsSync(logDir)) {
+            fs.mkdirSync(logDir, { recursive: true });
+        }
 
         if (!code) {
             return res.status(400).json({ error: "Code is required." });
@@ -858,16 +866,16 @@ void focus_pointer_impl(const string& label, int idx, int line = 0) {
 void resolve_impl(int idx, int resolvedValue, int line = 0) {
     stepCount++;
     check_step_limit();
-    cout << "{\\\"step\\\":" << stepCount << ",\\\"action\\":\\\"resolve\\\",\\\"index\\\":" << idx << ",\\\"resolvedValue\\\":" << resolvedValue << ",\\\"line\\\":" << line << "}," << endl;
+    cout << "{\\\"step\\\":" << stepCount << ",\\\"action\\\":\\\"resolve\\\",\\\"index\\\":" << idx << ",\\\"resolvedValue\\\":" << resolvedValue << ",\\\"line\\\":" << line << "}," << endl;
 }
 
 bool compare_impl(int idx1, int idx2, int line = 0) {
     stepCount++;
     check_step_limit();
-    int val1 = global_nums[idx1];
-    int val2 = global_nums[idx2];
-    cout << "{\\\"step\\\":" << stepCount << ",\\\"action\\":\\\"compare\\\",\\\"stackTopIndex\\\":" << idx1 << ",\\\"stackTopValue\\\":" << val1 << ",\\\"arrayIndex\\\":" << idx2 << ",\\\"arrayValue\\\":" << val2 << ",\\\"line\\\":" << line << "}," << endl;
-    return val1 < val2;
+    int actualVal1 = (idx1 >= 0 && idx1 < (int)global_nums.size()) ? global_nums[idx1] : idx1;
+    int actualVal2 = (idx2 >= 0 && idx2 < (int)global_nums.size()) ? global_nums[idx2] : idx2;
+    cout << "{\\\"step\\\":" << stepCount << ",\\\"action\\\":\\\"compare\\\",\\\"stackTopIndex\\\":" << idx1 << ",\\\"stackTopValue\\\":" << actualVal1 << ",\\\"arrayIndex\\\":" << idx2 << ",\\\"arrayValue\\\":" << actualVal2 << ",\\\"line\\\":" << line << "}," << endl;
+    return actualVal1 < actualVal2;
 }
 
 void visit_impl(int val, int line = 0) {
@@ -1121,15 +1129,20 @@ int main() {
 }
 `;
 
-        fs.writeFileSync('runner.cpp', cppCode);
+        const runnerCppPath = path.join(logDir, `attempt_${attempt}_runner.cpp`);
+        const runnerBinPath = path.join(logDir, `attempt_${attempt}_runner`);
+        fs.writeFileSync(runnerCppPath, cppCode);
         
         // 2. Compile and Execute
         const execOpts = { maxBuffer: 1024 * 1024 * 5, timeout: EXEC_TIMEOUT_MS };
-        console.log("Compiling runner.cpp...");
-        execSync('g++ -std=c++17 runner.cpp -o runner', execOpts);
-        console.log("Executing binary...");
-        const stdout = execSync('./runner', execOpts).toString();
+        console.log(`Compiling ${runnerCppPath}...`);
+        execSync(`g++ -std=c++17 "${runnerCppPath}" -o "${runnerBinPath}"`, execOpts);
+        console.log(`Executing binary ${runnerBinPath}...`);
+        const stdout = execSync(`"${runnerBinPath}"`, execOpts).toString();
         
+        // Save raw output log
+        const traceOutputRawPath = path.join(logDir, `attempt_${attempt}_trace_output_raw.json`);
+        fs.writeFileSync(traceOutputRawPath, stdout);
         // Ensure valid JSON (clean trailing commas if any, though the finish step handles the last one nicely)
         let rawTrace;
         try {

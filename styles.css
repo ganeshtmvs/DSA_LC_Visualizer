@@ -2419,4 +2419,119 @@ body {
     margin: 0 4px;
 }
 
+/* Premium Editorial UI Redesign */
+.premium-editorial-card {
+    background: rgba(15, 23, 42, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 20px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+}
 
+.editorial-header-banner {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    background: linear-gradient(135deg, rgba(56, 189, 248, 0.1), rgba(244, 114, 182, 0.1));
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    padding: 16px 20px;
+}
+
+.editorial-icon {
+    font-size: 2rem;
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+}
+
+.editorial-titles {
+    display: flex;
+    flex-direction: column;
+}
+
+.editorial-titles h3 {
+    margin: 0;
+    font-family: 'Outfit', sans-serif;
+    font-size: 1.25rem;
+    font-weight: 800;
+    background: linear-gradient(to right, #e2e8f0, #94a3b8);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.editorial-subtitle {
+    font-size: 0.85rem;
+    color: #38bdf8;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+
+.editorial-content-body {
+    padding: 20px;
+}
+
+.problem-status-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: rgba(0, 0, 0, 0.2);
+    padding: 10px 16px;
+    border-radius: 8px;
+    margin-bottom: 24px;
+    border: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.status-label {
+    color: #64748b;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.problem-name-glow {
+    color: #f8fafc;
+    font-size: 1.05rem;
+    font-weight: 700;
+    text-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
+}
+
+.instruction-box {
+    display: flex;
+    gap: 16px;
+    background: rgba(56, 189, 248, 0.03);
+    border-left: 3px solid #38bdf8;
+    padding: 16px;
+    border-radius: 0 8px 8px 0;
+}
+
+.instruction-icon {
+    font-size: 1.5rem;
+    animation: bounceRight 2s infinite ease-in-out;
+}
+
+@keyframes bounceRight {
+    0%, 100% { transform: translateX(0); }
+    50% { transform: translateX(4px); }
+}
+
+.instruction-text p {
+    margin: 0 0 12px 0;
+    color: #e2e8f0;
+    font-weight: 500;
+}
+
+.instruction-text ul {
+    margin: 0;
+    padding-left: 20px;
+    color: #cbd5e1;
+}
+
+.instruction-text li {
+    margin-bottom: 6px;
+    position: relative;
+}
+
+.instruction-text li::marker {
+    color: #f472b6;
+}

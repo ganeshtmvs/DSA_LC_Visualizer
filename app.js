@@ -47,6 +47,7 @@ const instrumentBtn = document.getElementById('instrument-btn');
 const instrumentStatus = document.getElementById('instrument-status');
 const demoBtn = document.getElementById('demo-btn');
 const arrayInput = document.getElementById('array-input');
+const sessionIdInput = document.getElementById('session-id-input');
 const codeInput = document.getElementById('code-input');
 const loadingSpinner = document.getElementById('loading-spinner');
 const algoSelect = document.getElementById('algo-select');
@@ -119,6 +120,20 @@ function loadTraceData(data, testInput) {
     buildCodeViewer();
     buildTimelineHeatmap();
     render();
+    
+    // Extract and display the execution result if present
+    const resultPanel = document.getElementById('execution-results-panel');
+    const resultContent = document.getElementById('execution-results-content');
+    if (resultPanel && resultContent && data && data.steps) {
+        const resultStep = data.steps.find(s => s.action === 'result');
+        if (resultStep && resultStep.value !== undefined) {
+            resultPanel.classList.remove('hidden');
+            resultContent.textContent = typeof resultStep.value === 'object' ? JSON.stringify(resultStep.value) : String(resultStep.value);
+        } else {
+            resultPanel.classList.add('hidden');
+            resultContent.textContent = 'No output yet.';
+        }
+    }
 }
 
 function injectGraphAdjacency(code, graphNodes, graphEdges) {
@@ -132,7 +147,18 @@ function injectGraphAdjacency(code, graphNodes, graphEdges) {
         .replace('// @GRAPH_ADJ_BUILD', edgeLines || '        // no edges');
 }
 
-async function fetchTrace(code, arrayStr, noAI) {
+async function fetchTrace(code, arrayStr, skipAI, sessionId, attempt) {
+    const payload = {
+        code,
+        array: arrayStr,
+        is2D: window.is2DProblem,
+        isGraph: window.isGraphProblem,
+        graphNodes: window.graphNodes,
+        graphEdges: window.graphEdges,
+        noAI: skipAI,
+        sessionId: sessionId,
+        attempt: attempt
+    };
     const parsed = parseTestInput(arrayStr);
     let preparedCode = injectGraphAdjacency(code, parsed.graphNodes, parsed.graphEdges);
     const { array, is2D, isGraph, graphNodes, graphEdges } = parsed;
@@ -154,7 +180,11 @@ async function fetchTrace(code, arrayStr, noAI) {
             isGraph,
             graphNodes: isGraph ? graphNodes : undefined,
             graphEdges: isGraph ? graphEdges : undefined,
-            noAI
+            noAI: skipAI,
+            sessionId: sessionId,
+            attempt: attempt,
+            title: window.currentProblemTitle || "Custom Problem",
+            content: window.currentProblemContent || ""
         })
     });
 
@@ -405,12 +435,12 @@ function render() {
     let stack = [];
     const dataArray = animationData.array || [];
     let resolvedNGEs = new Array(Math.max(dataArray.length, 1)).fill("?");
-    
+
     // Transient UI state for the *current* frame
     let focusedIndex = -1;
     let comparingStackIndex = -1;
     let comparingArrayIndex = -1;
-    
+
     // Tree visited nodes list
     let visitedTreeNodes = new Set();
     let focusedTreeNodePtr = null;
@@ -445,7 +475,7 @@ function render() {
     for (let i = 0; i < currentStep; i++) {
         const stepData = steps[i];
         if (!stepData) continue;
-        
+
         // Apply persistent state changes
         if (stepData.action === "push_stack" || stepData.action === "push_queue" || stepData.action === "push_back_deque") {
             stack.push(stepData.index);
@@ -612,22 +642,22 @@ function render() {
         stack.forEach((idx) => {
             const item = document.createElement('div');
             item.className = 'stack-item';
-            
+
             const idxSpan = document.createElement('span');
             idxSpan.className = 'index-val';
             idxSpan.innerText = `idx: ${idx}`;
-            
+
             const valSpan = document.createElement('span');
             valSpan.className = 'actual-val';
             valSpan.innerText = `(val: ${arrSource[idx]})`;
-            
+
             item.appendChild(idxSpan);
             item.appendChild(valSpan);
 
             if (idx === comparingStackIndex) {
                 item.classList.add('comparing');
             }
-            
+
             stackContainer.appendChild(item);
         });
     } else {
@@ -684,7 +714,7 @@ function render() {
             // Draw connection lines
             Object.keys(nodeMap).forEach(ptr => {
                 const node = nodeMap[ptr];
-                
+
                 if (node.left && nodeMap[node.left]) {
                     const child = nodeMap[node.left];
                     const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
@@ -698,7 +728,7 @@ function render() {
                     }
                     svg.appendChild(line);
                 }
-                
+
                 if (node.right && nodeMap[node.right]) {
                     const child = nodeMap[node.right];
                     const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
@@ -746,21 +776,21 @@ function render() {
                 const cell = document.createElement('div');
                 cell.className = 'grid-cell';
                 const cellValue = gridCells[`${r},${c}`] !== undefined ? gridCells[`${r},${c}`] : 0;
-                
+
                 cell.innerText = cellValue;
-                
+
                 // Color standard '0' vs '1' or others beautifully
                 if (cellValue === 0 || cellValue === '#') {
                     cell.classList.add('wall');
                 }
-                
+
                 const key = `${r},${c}`;
                 if (focusedGridCell && focusedGridCell.row === r && focusedGridCell.col === c) {
                     cell.classList.add('focused');
                 } else if (visitedGridCells.has(key)) {
                     cell.classList.add('visited');
                 }
-                
+
                 gridContainer.appendChild(cell);
             }
         }
@@ -784,7 +814,7 @@ function render() {
             const nodeDiv = document.createElement('div');
             nodeDiv.className = 'list-node';
             nodeDiv.innerText = nodeData.val;
-            
+
             if (ptr === focusedListNodePtr) {
                 nodeDiv.classList.add('focused');
             }
@@ -792,7 +822,7 @@ function render() {
             // Create pointer badges above this node
             const badgesContainer = document.createElement('div');
             badgesContainer.className = 'pointer-labels-container';
-            
+
             Object.keys(pointerLabels).forEach((label) => {
                 if (pointerLabels[label] === ptr) {
                     const badge = document.createElement('div');
@@ -805,7 +835,7 @@ function render() {
             outerWrapper.appendChild(badgesContainer);
             outerWrapper.appendChild(nodeDiv);
             listContainer.appendChild(outerWrapper);
-            
+
             nodeElementsMap[ptr] = nodeDiv;
         });
 
@@ -818,7 +848,7 @@ function render() {
 
         // Add standard arrow markers definition for vector heads
         const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
-        
+
         // Marker 1: Standard gray arrow
         const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
         marker.setAttribute('id', 'arrow');
@@ -1059,15 +1089,15 @@ function render() {
                 if (idx === activeFrames.length - 1) {
                     el.classList.add('active');
                 }
-                
+
                 const nameEl = document.createElement('span');
                 nameEl.className = 'stack-frame-name';
                 nameEl.textContent = frame.name;
-                
+
                 const argsEl = document.createElement('span');
                 argsEl.className = 'stack-frame-args';
                 argsEl.textContent = frame.args || '()';
-                
+
                 el.appendChild(nameEl);
                 el.appendChild(argsEl);
                 recContainer.appendChild(el);
@@ -1149,7 +1179,7 @@ const templates = {
 
 algoSelect.addEventListener('change', (e) => {
     const val = e.target.value;
-    
+
     if (!val) {
         arrayInput.value = '';
         codeInput.value = '';
@@ -1169,7 +1199,7 @@ algoSelect.addEventListener('change', (e) => {
         if (titleEl && templates[val].title) {
             titleEl.innerText = templates[val].title;
         }
-        
+
         // Clear LeetCode inputs and concepts to prevent state pollution
         if (leetcodeUrlInput) leetcodeUrlInput.value = '';
         const conceptsPanel = document.getElementById('lc-concepts-panel');
@@ -1178,7 +1208,7 @@ algoSelect.addEventListener('change', (e) => {
             const conceptsContainer = document.getElementById('lc-concepts-container');
             if (conceptsContainer) conceptsContainer.innerHTML = '';
         }
-        
+
         // Hide premium panels
         const edgePanel = document.getElementById('edge-cases-panel');
         if (edgePanel) edgePanel.classList.add('hidden');
@@ -1186,12 +1216,12 @@ algoSelect.addEventListener('change', (e) => {
         if (compSection) compSection.classList.add('hidden');
         const diagPanel = document.getElementById('diagnostics-panel');
         if (diagPanel) diagPanel.classList.add('hidden');
-        
+
         // Hide standard templates notice if visible
         if (typeof lcImportNotice !== 'undefined' && lcImportNotice) {
             lcImportNotice.classList.add('hidden');
         }
-        
+
         // Reset trace & playback state
         animationData = null;
         currentStep = 0;
@@ -1215,7 +1245,7 @@ leetcodeUrlInput.addEventListener('input', () => {
             const conceptsContainer = document.getElementById('lc-concepts-container');
             if (conceptsContainer) conceptsContainer.innerHTML = '';
         }
-        
+
         // Hide premium panels
         const edgePanel = document.getElementById('edge-cases-panel');
         if (edgePanel) edgePanel.classList.add('hidden');
@@ -1223,7 +1253,7 @@ leetcodeUrlInput.addEventListener('input', () => {
         if (compSection) compSection.classList.add('hidden');
         const diagPanel = document.getElementById('diagnostics-panel');
         if (diagPanel) diagPanel.classList.add('hidden');
-        
+
         // Hide standard templates notice if visible
         if (typeof lcImportNotice !== 'undefined' && lcImportNotice) {
             lcImportNotice.classList.add('hidden');
@@ -1277,6 +1307,9 @@ importLcBtn.addEventListener('click', async () => {
 
         const data = await response.json();
 
+        window.currentProblemTitle = data.title;
+        window.currentProblemContent = data.content;
+
         // Dynamically update problem panel header and description!
         const titleEl = document.getElementById('problem-title');
         const difficultyEl = document.getElementById('problem-difficulty');
@@ -1289,13 +1322,40 @@ importLcBtn.addEventListener('click', async () => {
             difficultyEl.className = `difficulty-badge ${data.difficulty.toLowerCase()}`;
         }
         if (descriptionEl && data.content) descriptionEl.innerHTML = data.content;
-        
+
         // Auto-generate dynamic Editorial tab content based on the problem title
         if (editorialEl && data.title) {
+            const diffLower = data.difficulty.toLowerCase();
             editorialEl.innerHTML = `
-                <h3>💡 Dynamic AI Solved Strategy</h3>
-                <p>We are analyzing <strong>${data.title}</strong> (Difficulty: <code>${data.difficulty}</code>).</p>
-                <p>Select any of the conceptual approach cards under the <strong>Concepts</strong> tab to load its optimal code into the editor, view Big-O complexity curves, and auto-run the visual animation steps!</p>
+                <div class="premium-editorial-card">
+                    <div class="editorial-header-banner">
+                        <span class="editorial-icon">✨</span>
+                        <div class="editorial-titles">
+                            <h3>Dynamic AI Solved Strategy</h3>
+                            <span class="editorial-subtitle">AI-Powered Algorithm Analysis</span>
+                        </div>
+                    </div>
+                    
+                    <div class="editorial-content-body">
+                        <div class="problem-status-bar">
+                            <span class="status-label">Analyzing:</span>
+                            <strong class="problem-name-glow">${data.title}</strong>
+                            <span class="difficulty-badge ${diffLower}">${data.difficulty}</span>
+                        </div>
+                        
+                        <div class="instruction-box">
+                            <div class="instruction-icon">👉</div>
+                            <div class="instruction-text">
+                                <p>Select any of the conceptual approach cards under the <strong>Concepts</strong> tab to:</p>
+                                <ul>
+                                    <li>Load its optimal C++ code into the editor</li>
+                                    <li>View Big-O complexity metrics</li>
+                                    <li>Auto-run the visual animation tracing engine</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             `;
         }
 
@@ -1321,15 +1381,15 @@ importLcBtn.addEventListener('click', async () => {
         // 2. Render Solution Concept Selector cards
         const conceptsPanel = document.getElementById('lc-concepts-panel');
         const conceptsContainer = document.getElementById('lc-concepts-container');
-        
+
         if (conceptsPanel && conceptsContainer) {
             conceptsPanel.classList.remove('hidden');
             conceptsContainer.innerHTML = '';
-            
+
             if (data.concepts && Array.isArray(data.concepts) && data.concepts.length > 0) {
                 data.concepts.forEach(c => {
                     const card = document.createElement('div');
-                    
+
                     // Match complexity category for glowing neon left-borders
                     let compClass = 'complexity-linear';
                     const tc = (c.timeComplexity || '').toLowerCase();
@@ -1338,36 +1398,36 @@ importLcBtn.addEventListener('click', async () => {
                     else if (tc.includes('log')) compClass = 'complexity-logarithmic';
                     else if (tc.includes('1')) compClass = 'complexity-constant';
                     else if (tc.includes('n')) compClass = 'complexity-linear';
-                    
+
                     card.className = `lc-concept-card ${compClass}`;
-                    
+
                     const header = document.createElement('div');
                     header.className = 'lc-concept-header';
-                    
+
                     const name = document.createElement('div');
                     name.className = 'lc-concept-name';
                     name.textContent = c.name;
-                    
+
                     const badge = document.createElement('div');
                     badge.className = 'lc-concept-badge';
                     badge.textContent = `${c.timeComplexity} | ${c.spaceComplexity}`;
-                    
+
                     header.appendChild(name);
                     header.appendChild(badge);
-                    
+
                     const summary = document.createElement('div');
                     summary.className = 'lc-concept-summary';
                     summary.textContent = c.summary;
-                    
+
                     card.appendChild(header);
                     card.appendChild(summary);
-                    
+
                     // Concept Card Click: Fetch the dynamic solved and instrumented Solution C++ code!
                     card.addEventListener('click', async () => {
                         // Mark active loading indicator on clicked card
                         card.style.opacity = '0.7';
                         badge.innerHTML = '<span class="loading-dots">Coding...</span>';
-                        
+
                         // Disable manual action buttons during active AI generation to prevent race condition compilation
                         if (generateBtn) generateBtn.disabled = true;
                         if (instrumentBtn) instrumentBtn.disabled = true;
@@ -1375,7 +1435,7 @@ importLcBtn.addEventListener('click', async () => {
                         if (messageBox) {
                             messageBox.innerHTML = '<span class="loading-dots" style="color: var(--neon-blue);">AI is writing and auto-instrumenting the chosen concept solution...</span>';
                         }
-                        
+
                         try {
                             const solveRes = await fetch(`${API_BASE}/leetcode/solve-concept`, {
                                 method: 'POST',
@@ -1391,31 +1451,30 @@ importLcBtn.addEventListener('click', async () => {
                                     array: data.array || arrayInput.value
                                 })
                             });
-                            
+
                             if (!solveRes.ok) {
                                 const solveErr = await solveRes.json();
                                 throw new Error(solveErr.error || "Failed to generate solution code.");
                             }
-                            
+
                             const solveData = await solveRes.json();
-                            
+
                             // Load C++ code to editor
                             if (solveData.code) {
                                 codeInput.value = solveData.code;
                             }
-                            if (solveData.instrumentedCode) {
-                                window.instrumentedCode = solveData.instrumentedCode;
-                            }
+                            // Do not set window.instrumentedCode here. The code needs to be sent to /generate for auto-instrumentation.
+                            window.instrumentedCode = '';
                             if (solveData.array) {
                                 arrayInput.value = solveData.array;
                             }
-                            
+
                             // Load Complexity
                             const timeVal = document.getElementById('time-complexity-value');
                             const spaceVal = document.getElementById('space-complexity-value');
                             const bottlenecksEl = document.getElementById('complexity-bottlenecks');
                             const compSection = document.getElementById('complexity-section');
-                            
+
                             if (timeVal && spaceVal && bottlenecksEl && compSection) {
                                 compSection.classList.remove('hidden');
                                 timeVal.textContent = solveData.timeComplexity || c.timeComplexity;
@@ -1423,53 +1482,61 @@ importLcBtn.addEventListener('click', async () => {
                                 bottlenecksEl.textContent = solveData.bottlenecks || '';
                                 renderComplexityChart(compClass.replace('complexity-', ''));
                             }
-                            
+
                             // Load Edge cases
                             const edgePanel = document.getElementById('edge-cases-panel');
                             const edgeContainer = document.getElementById('edge-cases-container');
-                            
+
                             if (edgePanel && edgeContainer) {
                                 edgePanel.classList.remove('hidden');
                                 edgeContainer.innerHTML = '';
-                                
+
                                 if (solveData.edgeCases && Array.isArray(solveData.edgeCases)) {
                                     solveData.edgeCases.forEach(ec => {
                                         const eCard = document.createElement('div');
                                         eCard.className = 'edge-case-card';
-                                        
+
                                         const eDetails = document.createElement('div');
                                         eDetails.className = 'edge-case-details';
-                                        
+
                                         const eTitle = document.createElement('div');
                                         eTitle.className = 'edge-case-title';
                                         eTitle.textContent = ec.caseName;
-                                        
+
                                         const eDesc = document.createElement('div');
                                         eDesc.className = 'edge-case-desc';
                                         eDesc.textContent = `Input: ${ec.input}`;
                                         
+                                        const eExp = document.createElement('div');
+                                        eExp.className = 'edge-case-expected';
+                                        eExp.style.fontSize = '11px';
+                                        eExp.style.color = 'var(--text-secondary)';
+                                        eExp.style.marginTop = '4px';
+                                        eExp.textContent = `Expected LLM Output: ${ec.expectedOutput || 'N/A'}`;
+
                                         eDetails.appendChild(eTitle);
                                         eDetails.appendChild(eDesc);
-                                        
+                                        eDetails.appendChild(eExp);
+
                                         const eBtn = document.createElement('button');
                                         eBtn.className = 'edge-case-load-btn';
-                                        eBtn.textContent = 'Load';
-                                        
+                                        eBtn.textContent = 'Load & Run';
+
                                         eCard.appendChild(eDetails);
                                         eCard.appendChild(eBtn);
-                                        
+
                                         eCard.addEventListener('click', () => {
                                             arrayInput.value = ec.input;
                                             generateBtn.click();
                                         });
-                                        
+
                                         edgeContainer.appendChild(eCard);
                                     });
                                 }
                             }
-                            
+
                             // Let user manually trigger Visualizer Execution when ready
-                            
+
                         } catch (err) {
                             console.error(err);
                             alert(`Failed to build concept solution: ${err.message || err}`);
@@ -1482,10 +1549,10 @@ importLcBtn.addEventListener('click', async () => {
                             badge.textContent = `${c.timeComplexity} | ${c.spaceComplexity}`;
                         }
                     });
-                    
+
                     conceptsContainer.appendChild(card);
                 });
-                
+
                 // Do not automatically trigger the first concept card; let the user select or paste their own code.
             } else {
                 conceptsContainer.innerHTML = '<div style="color: var(--text-muted); font-size: 0.9rem;">No alternative concepts discovered for this problem.</div>';
@@ -1531,22 +1598,16 @@ function parseTestInput(arrayStr) {
     }
 
     try {
-        let cleanStr = trimmed;
-        if (!cleanStr.startsWith('[')) {
+        let cleanStr = trimmed.replace(/'/g, '"').replace(/\bnull\b/ig, 'null');
+        try {
+            array = JSON.parse(cleanStr);
+        } catch (e1) {
             cleanStr = '[' + cleanStr + ']';
+            array = JSON.parse(cleanStr);
         }
-        cleanStr = cleanStr.replace(/'/g, '"').replace(/\bnull\b/ig, 'null');
-        array = JSON.parse(cleanStr);
+
         if (array.length > 0 && Array.isArray(array[0])) {
-            if (array[0].length === 2 && typeof array[0][0] === 'number' && typeof array[0][1] === 'number') {
-                isGraph = true;
-                graphEdges = array;
-                let maxV = 0;
-                graphEdges.forEach(([u, v]) => { maxV = Math.max(maxV, u, v); });
-                graphNodes = maxV + 1;
-            } else {
-                is2D = true;
-            }
+            is2D = true;
         }
     } catch (e) {
         array = trimmed.split(',').map((s) => {
@@ -1589,7 +1650,7 @@ if (instrumentBtn) {
         instrumentBtn.disabled = true;
         generateBtn.disabled = true;
         if (runAllBtn) runAllBtn.disabled = true;
-        
+
         instrumentStatus.classList.remove('hidden', 'success', 'error');
         instrumentStatus.classList.add('loading');
         instrumentStatus.innerHTML = '✨ AI Auto-Instrumenting & Verifying in C++ Sandbox... (Might take up to 20s if compiling retries are needed)';
@@ -1598,7 +1659,11 @@ if (instrumentBtn) {
             const res = await fetch('http://localhost:3005/instrument', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ code })
+                body: JSON.stringify({
+                    code,
+                    title: window.currentProblemTitle || "Custom Problem",
+                    content: window.currentProblemContent || ""
+                })
             });
 
             const data = await res.json();
@@ -1624,11 +1689,11 @@ if (instrumentBtn) {
             }
 
             window.instrumentedCode = data.code;
-            
+
             instrumentStatus.classList.remove('loading');
             instrumentStatus.classList.add('success');
             instrumentStatus.innerHTML = '🎉 Success! Code auto-instrumented (Hidden for your convenience) & sandboxed compiled!';
-            
+
             // Clear status after 5s
             setTimeout(() => {
                 instrumentStatus.classList.add('hidden');
@@ -1682,9 +1747,9 @@ if (resetCodeBtn) {
     });
 }
 
-    generateBtn.addEventListener('click', async () => {
-        const code = window.instrumentedCode || codeInput.value.trim();
-        const arrayStr = arrayInput.value.trim();
+generateBtn.addEventListener('click', async () => {
+    const code = window.instrumentedCode || codeInput.value.trim();
+    const arrayStr = arrayInput.value.trim();
 
     if (!code || !arrayStr) {
         alert('Please provide both the code and the test array.');
@@ -1697,29 +1762,41 @@ if (resetCodeBtn) {
     messageBox.innerText = 'Requesting trace from local AI...';
     savePreferences();
 
+    let autoRetries = parseInt(generateBtn.dataset.retries || '0');
+
+    // Allow manual session ID override for debugging
+    const manualSessionId = sessionIdInput && sessionIdInput.value.trim();
+    if (manualSessionId) {
+        window.currentSessionId = manualSessionId;
+    } else if (autoRetries === 0 || !window.currentSessionId) {
+        window.currentSessionId = `Run_${Date.now()}`;
+        // Automatically populate the input so the user knows what session is running
+        if (sessionIdInput) sessionIdInput.value = window.currentSessionId;
+    }
+
     try {
-        const data = await fetchTrace(code, arrayStr, skipAiCheckbox.checked);
+        const data = await fetchTrace(code, arrayStr, skipAiCheckbox.checked, window.currentSessionId, autoRetries);
         testCaseResults = [{ input: arrayStr, trace: data, error: null }];
         activeTestCaseIndex = 0;
-        
+
         // Hide compiler diagnostics if active
         const diagPanel = document.getElementById('diagnostics-panel');
         if (diagPanel) diagPanel.classList.add('hidden');
-        
+
         loadTraceData(data);
         renderTestCaseTabs();
-        
+
         // Fetch premium AI additions asynchronously
         runAIComplexityAnalysis();
         fetchEdgeCaseSuggestions();
-        
+
         generateBtn.dataset.retries = '0';
-        
+
     } catch (error) {
         let autoRetries = parseInt(generateBtn.dataset.retries || '0');
         console.error('Failed to generate trace:', error);
         messageBox.innerText = 'Error: Failed to generate trace.';
-        
+
         // AI diagnostics call
         const diagPanel = document.getElementById('diagnostics-panel');
         const diagExpl = document.getElementById('diagnostics-explanation');
@@ -1730,15 +1807,20 @@ if (resetCodeBtn) {
                 const diagRes = await fetch(`${API_BASE}/diagnose`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ code: codeInput.value, compilerError: error.message })
+                    body: JSON.stringify({
+                        code: codeInput.value,
+                        compilerError: error.message,
+                        title: window.currentProblemTitle || "Custom Problem",
+                        content: window.currentProblemContent || ""
+                    })
                 });
                 if (!diagRes.ok) throw new Error("Diagnostics failed");
                 const diagData = await diagRes.json();
-                
+
                 diagExpl.innerHTML = `
                     <div style="font-size: 0.95rem; margin-bottom: 12px; color: #cbd5e1; line-height: 1.5; white-space: pre-wrap;">${diagData.errorExplanation}</div>
                 `;
-                
+
                 const fixBtn = document.getElementById('one-click-fix-btn');
                 if (fixBtn && diagData.suggestedCode) {
                     fixBtn.classList.remove('hidden');
@@ -1748,7 +1830,7 @@ if (resetCodeBtn) {
                         diagPanel.classList.add('hidden');
                         generateBtn.click();
                     };
-                    
+
                     if (autoRetries < 3) {
                         generateBtn.dataset.retries = (autoRetries + 1).toString();
                         console.log(`Auto-applying AI fix (Attempt ${autoRetries + 1}/3)...`);
@@ -1942,15 +2024,15 @@ function buildCodeViewer() {
         const wrapper = document.createElement('div');
         wrapper.className = 'code-line-wrapper';
         wrapper.id = `code-line-wrapper-${lineNum}`;
-        
+
         const numEl = document.createElement('span');
         numEl.className = 'code-line-number';
         numEl.textContent = lineNum;
-        
+
         const contentEl = document.createElement('span');
         contentEl.className = 'code-line-content';
         contentEl.textContent = line;
-        
+
         wrapper.appendChild(numEl);
         wrapper.appendChild(contentEl);
         container.appendChild(wrapper);
@@ -1961,13 +2043,13 @@ function buildCodeViewer() {
 function highlightCodeLine(lineNum) {
     const container = document.getElementById('code-viewer-container');
     if (!container || container.classList.contains('hidden')) return;
-    
+
     // Remove previous highlights
     const highlighted = container.querySelectorAll('.code-line-wrapper.highlight');
     highlighted.forEach(el => el.classList.remove('highlight'));
-    
+
     if (!lineNum) return;
-    
+
     const activeLine = document.getElementById(`code-line-wrapper-${lineNum}`);
     if (activeLine) {
         activeLine.classList.add('highlight');
@@ -1990,7 +2072,7 @@ function buildTimelineHeatmap() {
         const pct = len > 1 ? (idx / (len - 1)) * 100 : 0;
         tick.style.left = `calc(${pct}% - 1px)`;
         tick.className = 'timeline-tick';
-        
+
         const action = step.action || '';
         if (action.includes('push_stack') || action.includes('push_queue') || action.includes('push_back_deque') || action.includes('push_heap')) {
             tick.classList.add('push');
@@ -2014,7 +2096,7 @@ function renderComplexityChart(complexityType) {
     const svg = document.getElementById('complexity-chart');
     if (!svg) return;
     svg.innerHTML = '';
-    
+
     // Draw gridlines
     for (let i = 1; i <= 4; i++) {
         const x = 40 + i * 68;
@@ -2027,7 +2109,7 @@ function renderComplexityChart(complexityType) {
         vLine.setAttribute('y2', 170);
         vLine.setAttribute('class', 'chart-grid');
         svg.appendChild(vLine);
-        
+
         // Horizontal grid line
         const hLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
         hLine.setAttribute('x1', 40);
@@ -2121,12 +2203,12 @@ function renderComplexityChart(complexityType) {
         </linearGradient>
     `;
     svg.appendChild(defs);
-    
+
     // Add glowing stroke style
     activePoly.style.stroke = 'url(#chart-glow-gradient)';
     activePoly.style.filter = 'drop-shadow(0px 0px 5px rgba(56, 189, 248, 0.75))';
     svg.appendChild(activePoly);
-    
+
     // Add active label indicator
     const activeText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
     activeText.setAttribute('x', 50);
@@ -2145,29 +2227,29 @@ async function runAIComplexityAnalysis() {
     const bottlenecksEl = document.getElementById('complexity-bottlenecks');
     const aiJudgementEl = document.getElementById('ai-judgement');
     const section = document.getElementById('complexity-section');
-    
+
     if (!timeVal || !spaceVal || !bottlenecksEl || !section) return;
-    
+
     try {
         section.classList.remove('hidden');
         timeVal.textContent = 'Analyzing...';
         spaceVal.textContent = 'Analyzing...';
         bottlenecksEl.textContent = 'Analyzing solution complexity patterns...';
         if (aiJudgementEl) aiJudgementEl.innerHTML = '<em>Consulting AI Judge...</em>';
-        
+
         const res = await fetch(`${API_BASE}/analyze-complexity`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ code })
         });
         if (!res.ok) throw new Error("Complexity API call failed");
-        
+
         const data = await res.json();
         timeVal.textContent = data.time || 'O(?)';
         spaceVal.textContent = data.space || 'O(?)';
         bottlenecksEl.textContent = data.bottlenecks || '';
         if (aiJudgementEl) aiJudgementEl.textContent = data.improvementSuggestion || 'Code appears optimal or no suggestion provided.';
-        
+
         // Render Chart
         const cType = data.complexityType || 'linear';
         renderComplexityChart(cType);
@@ -2186,54 +2268,54 @@ async function fetchEdgeCaseSuggestions() {
     const code = codeInput.value;
     const panel = document.getElementById('edge-cases-panel');
     const container = document.getElementById('edge-cases-container');
-    
+
     if (!panel || !container) return;
-    
+
     try {
         panel.classList.remove('hidden');
         container.innerHTML = '<div style="color: var(--text-muted); font-size: 0.9rem;">AI is thinking of edge cases...</div>';
-        
+
         const res = await fetch(`${API_BASE}/suggest-cases`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ code })
         });
         if (!res.ok) throw new Error("Edge cases API call failed");
-        
+
         const data = await res.json();
         container.innerHTML = '';
         if (data.cases && Array.isArray(data.cases)) {
             data.cases.forEach(c => {
                 const card = document.createElement('div');
                 card.className = 'edge-case-card';
-                
+
                 const details = document.createElement('div');
                 details.className = 'edge-case-details';
-                
+
                 const title = document.createElement('div');
                 title.className = 'edge-case-title';
                 title.textContent = c.title;
-                
+
                 const desc = document.createElement('div');
                 desc.className = 'edge-case-desc';
                 desc.textContent = c.description;
-                
+
                 details.appendChild(title);
                 details.appendChild(desc);
-                
+
                 const btn = document.createElement('button');
                 btn.className = 'edge-case-load-btn';
                 btn.textContent = 'Load Case';
-                
+
                 card.appendChild(details);
                 card.appendChild(btn);
-                
+
                 card.addEventListener('click', () => {
                     arrayInput.value = c.input;
                     // Trigger click on generate trace button to immediately visualize it!
                     generateBtn.click();
                 });
-                
+
                 container.appendChild(card);
             });
         }
@@ -2496,7 +2578,7 @@ algoSelect.addEventListener('change', (e) => {
         codeInput.value = templates[val].cleanCode || templates[val].code;
         window.instrumentedCode = templates[val].code;
         updateProblemMetadata(val);
-        
+
         // Clear LeetCode inputs and concepts to prevent state pollution
         if (leetcodeUrlInput) leetcodeUrlInput.value = '';
         const conceptsPanel = document.getElementById('lc-concepts-panel');
@@ -2505,7 +2587,7 @@ algoSelect.addEventListener('change', (e) => {
             const conceptsContainer = document.getElementById('lc-concepts-container');
             if (conceptsContainer) conceptsContainer.innerHTML = '';
         }
-        
+
         // Hide premium panels
         const edgePanel = document.getElementById('edge-cases-panel');
         if (edgePanel) edgePanel.classList.add('hidden');
@@ -2513,12 +2595,12 @@ algoSelect.addEventListener('change', (e) => {
         if (compSection) compSection.classList.add('hidden');
         const diagPanel = document.getElementById('diagnostics-panel');
         if (diagPanel) diagPanel.classList.add('hidden');
-        
+
         // Hide standard templates notice if visible
         if (typeof lcImportNotice !== 'undefined' && lcImportNotice) {
             lcImportNotice.classList.add('hidden');
         }
-        
+
         // Reset trace & playback state
         animationData = null;
         currentStep = 0;
@@ -2539,7 +2621,7 @@ leetcodeUrlInput.addEventListener('input', () => {
             const conceptsContainer = document.getElementById('lc-concepts-container');
             if (conceptsContainer) conceptsContainer.innerHTML = '';
         }
-        
+
         // Hide premium panels
         const edgePanel = document.getElementById('edge-cases-panel');
         if (edgePanel) edgePanel.classList.add('hidden');
@@ -2547,12 +2629,12 @@ leetcodeUrlInput.addEventListener('input', () => {
         if (compSection) compSection.classList.add('hidden');
         const diagPanel = document.getElementById('diagnostics-panel');
         if (diagPanel) diagPanel.classList.add('hidden');
-        
+
         // Hide standard templates notice if visible
         if (typeof lcImportNotice !== 'undefined' && lcImportNotice) {
             lcImportNotice.classList.add('hidden');
         }
-        
+
         // Restore selected template metadata and synchronize editor code/inputs
         algoSelect.dispatchEvent(new Event('change'));
     }
