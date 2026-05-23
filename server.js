@@ -394,7 +394,6 @@ IMPORTANT FOR CODE INTEGRITY:
 - Return a valid JSON object matching the following structure:
 {
   "cleanCode": "The fully implemented standard class Solution C++ block without any visualizer macros.",
-  "instrumentedCode": "The fully implemented and instrumented complete class Solution C++ block containing the visualizer macros like focus_pointer, visit, resolve, compare, etc. Make sure to include all necessary helper headers like #include <vector>, <unordered_map>, <algorithm>, etc.",
   "array": "Formatted test case input string (e.g., '2, 7, 11, 15' or 'abcabcbb').",
   "problemType": "Detect which active visualizer container to display: 'array', 'stack', 'heap', 'tree', 'grid', 'list', 'map', 'graph'.",
   "timeComplexity": "Big-O time complexity string (e.g., 'O(N)').",
@@ -439,16 +438,8 @@ First sample input default: ${array}`;
         }
         sanitizedCleanCode = balanceBraces(sanitizedCleanCode);
 
-        let sanitizedInstrumentedCode = result.instrumentedCode || result.code || cppSnippet;
-        sanitizedInstrumentedCode = sanitizedInstrumentedCode.replace(/```(cpp|c\+\+|c)?/gi, '').replace(/```/g, '').trim();
-        if (sanitizedInstrumentedCode.endsWith(',')) {
-            sanitizedInstrumentedCode = sanitizedInstrumentedCode.slice(0, -1).trim();
-        }
-        sanitizedInstrumentedCode = balanceBraces(sanitizedInstrumentedCode);
-
         res.json({
             code: sanitizedCleanCode, // Return clean code to the editor
-            instrumentedCode: sanitizedInstrumentedCode, // Send the instrumented code separately
             array: result.array || array,
             problemType: result.problemType || 'array',
             timeComplexity: result.timeComplexity || 'O(N)',
@@ -462,6 +453,37 @@ First sample input default: ${array}`;
     }
 });
 
+const INSTRUMENT_SYSTEM_PROMPT = `
+You are an expert C++ developer and algorithm visualization tutor.
+You are given raw C++ code. Your ONLY job is to inject visualizer tracking hooks into the code without changing the time/space complexity or logical correctness.
+
+CRITICAL RULES:
+1. Wrap collections:
+   - "stack<int>" -> "stack<int>" (which is macro-wrapped automatically to VisualizerStack).
+   - "queue<int>" -> "queue<int>" (macro-wrapped to VisualizerQueue).
+   - "deque<int>" -> "deque<int>" (macro-wrapped to VisualizerDeque).
+   - "priority_queue<...>" -> "priority_queue<...>" (macro-wrapped to VisualizerPriorityQueue).
+   - "unordered_map<int, int>" -> "VisualizerMap". Make sure to use standard VisualizerMap methods:
+     - Use .put(key, val) instead of [key] = val.
+     - Use .get(key) instead of .find() or [key].
+     - Use .count(key) and .erase(key).
+
+2. Track Pointers (Two-Pointer / Binary Search):
+   - Use "focus_pointer(string label, int index)" to highlight indices. Example: focus_pointer("left", l), focus_pointer("right", r), focus_pointer("mid", mid).
+
+3. Track Comparisons & NGE:
+   - Use "compare(int idx1, int idx2)" for element comparisons in array search/sort/stack.
+   - Use "resolve(int index, int value)" to output resolved values (like NGE value at index).
+
+4. Track DFS / BFS / Traversals:
+   - 2D Grid DFS: Use "focus_cell(int r, int c)" when visiting, and "update_cell(int r, int c, int val)" on modification.
+   - Tree DFS: Use "visit(TreeNode* node)" when visiting nodes.
+   - Graph BFS/DFS: Use "visit_graph(int node)" when visiting, and "focus_graph_edge(int u, int v)" when crossing edges.
+
+5. DO NOT touch the function name, arguments, or the Solution class wrapper. Ensure standard headers are NOT added inside the block.
+6. Return ONLY the valid C++ code. Absolutely NO markdown block formatting, NO conversational text, NO explanations.
+`;
+
 app.post('/generate', async (req, res) => {
     try {
         const {
@@ -474,7 +496,9 @@ app.post('/generate', async (req, res) => {
             noAI,
             skipAI,
             sessionId = 'default',
-            attempt = 0
+            attempt = 0,
+            title = '',
+            content = ''
         } = req.body;
         const skipAi = noAI === true || skipAI === true;
 
@@ -1131,9 +1155,106 @@ int main() {
 
         const runnerCppPath = path.join(logDir, `attempt_${attempt}_runner.cpp`);
         const runnerBinPath = path.join(logDir, `attempt_${attempt}_runner`);
-        fs.writeFileSync(runnerCppPath, cppCode);
+
+        // 2. First-pass LLM instrumentation (skip if code already has visualizer macros)
+        const alreadyInstrumented = code.includes('focus_pointer') || code.includes('visit(') || code.includes('compare(') || code.includes('resolve(') || code.includes('visit_graph') || code.includes('VISUALIZER_GRAPH');
+        const cleanContent = (content || '').replace(/<[^>]*>/g, '').slice(0, 1500); // Strip HTML, trim to avoid huge prompts
+
+        let workingCode = code;
+        if (!alreadyInstrumented && !skipAi) {
+            const MAX_INSTRUMENT_ATTEMPTS = 3;
+            let instrAttempt = 0;
+            let instrSuccess = false;
+            let instrError = '';
+            let lastInstrCode = code;
+
+            while (instrAttempt < MAX_INSTRUMENT_ATTEMPTS && !instrSuccess) {
+                instrAttempt++;
+                console.log(`Instrumentation attempt ${instrAttempt}/${MAX_INSTRUMENT_ATTEMPTS} for "${title || 'unknown'}"...`);
+
+                const instrPrompt = instrAttempt === 1
+                    ? `Problem: ${title || 'Algorithm Problem'}\n${cleanContent ? `Description: ${cleanContent}\n` : ''}Inject visualizer tracking macros into this C++ code. Return ONLY the instrumented C++ class block, no explanations.\n\n${code}`
+                    : `The instrumented C++ code you produced FAILED to compile.\nProblem: ${title || 'Algorithm Problem'}\n${cleanContent ? `Description: ${cleanContent}\n` : ''}Original clean code:\n${code}\n\nYour failed attempt:\n${lastInstrCode}\n\nCompiler error:\n${instrError}\n\nFix ALL compilation errors. Return ONLY the corrected, instrumented C++ code.`;
+
+                try {
+                    const instrResponse = await runLLM(instrPrompt, INSTRUMENT_SYSTEM_PROMPT, false);
+                    lastInstrCode = instrResponse.replace(/```(cpp|c\+\+|c)?/gi, '').replace(/```/g, '').trim();
+
+                    // Verify it compiles inside a lightweight sandbox
+                    const verifyCpp = `
+#include <iostream>
+#include <vector>
+#include <stack>
+#include <queue>
+#include <deque>
+#include <string>
+#include <unordered_map>
+#include <unordered_set>
+#include <map>
+#include <set>
+#include <utility>
+#include <algorithm>
+#include <numeric>
+#include <climits>
+using namespace std;
+struct TreeNode { int val; TreeNode *left, *right; TreeNode(int x):val(x),left(NULL),right(NULL){} };
+struct ListNode { int val; ListNode *next; ListNode(int x):val(x),next(NULL){} };
+vector<int> global_nums;
+int stepCount = 0;
+void focus_pointer_impl(const string&, int, int=0) {}
+void resolve_impl(int, int, int=0) {}
+bool compare_impl(int, int, int=0) { return false; }
+void visit_impl(int, int=0) {}
+void visit_graph_impl(int, int=0) {}
+void focus_graph_edge_impl(int, int, int=0) {}
+void focus_cell_impl(int, int, int=0) {}
+void update_cell_impl(int, int, int, int=0) {}
+void visualizer_push_frame_impl(const string&, const string&, int=0) {}
+void visualizer_pop_frame_impl(int=0) {}
+#define compare(i,j) compare_impl(i,j,__LINE__)
+#define resolve(i,v) resolve_impl(i,v,__LINE__)
+#define visit(n) visit_impl(n,__LINE__)
+#define focus_pointer(l,i) focus_pointer_impl(l,i,__LINE__)
+#define visit_graph(n) visit_graph_impl(n,__LINE__)
+#define focus_graph_edge(u,v) focus_graph_edge_impl(u,v,__LINE__)
+#define focus_cell(r,c) focus_cell_impl(r,c,__LINE__)
+#define update_cell(r,c,val) update_cell_impl(r,c,val,__LINE__)
+#define visualizer_push_frame(n,a) visualizer_push_frame_impl(n,a,__LINE__)
+#define visualizer_pop_frame() visualizer_pop_frame_impl(__LINE__)
+${lastInstrCode}
+int main() { return 0; }`;
+
+                    const verifyPath = path.join(logDir, `attempt_${attempt}_verify_instr_${instrAttempt}.cpp`);
+                    const verifyBin = path.join(logDir, `attempt_${attempt}_verify_instr_${instrAttempt}`);
+                    fs.writeFileSync(verifyPath, verifyCpp);
+                    try {
+                        execSync(`g++ -std=c++17 "${verifyPath}" -o "${verifyBin}"`, { stdio: 'pipe' });
+                        instrSuccess = true;
+                        workingCode = lastInstrCode;
+                        console.log(`Instrumentation succeeded on attempt ${instrAttempt}.`);
+                    } catch (compErr) {
+                        instrError = compErr.stderr ? compErr.stderr.toString() : compErr.message;
+                        console.warn(`Instr compile failed (attempt ${instrAttempt}): ${instrError.slice(0, 300)}`);
+                    }
+                } catch (llmErr) {
+                    console.warn(`LLM instrumentation failed (attempt ${instrAttempt}):`, llmErr.message);
+                    instrError = llmErr.message;
+                }
+            }
+
+            if (!instrSuccess) {
+                console.warn(`All ${MAX_INSTRUMENT_ATTEMPTS} instrumentation attempts failed. Falling back to original code.`);
+                workingCode = code;
+            }
+        }
+
+        // Replace user code in cppCode template with the (now instrumented) working code
+        const finalCppCode = cppCode.replace(code, workingCode);
+
+        // 3. Write & compile the full runner
+        fs.writeFileSync(runnerCppPath, finalCppCode);
         
-        // 2. Compile and Execute
+        // Compile and Execute
         const execOpts = { maxBuffer: 1024 * 1024 * 5, timeout: EXEC_TIMEOUT_MS };
         console.log(`Compiling ${runnerCppPath}...`);
         execSync(`g++ -std=c++17 "${runnerCppPath}" -o "${runnerBinPath}"`, execOpts);
@@ -1211,37 +1332,6 @@ Return ONLY a JSON object with a single key "messages" containing an array of st
         res.status(500).json({ error: "Failed to generate trace", details: error.message });
     }
 });
-
-const INSTRUMENT_SYSTEM_PROMPT = `
-You are an expert C++ developer and algorithm visualization tutor.
-You are given raw C++ code. Your ONLY job is to inject visualizer tracking hooks into the code without changing the time/space complexity or logical correctness.
-
-CRITICAL RULES:
-1. Wrap collections:
-   - "stack<int>" -> "stack<int>" (which is macro-wrapped automatically to VisualizerStack).
-   - "queue<int>" -> "queue<int>" (macro-wrapped to VisualizerQueue).
-   - "deque<int>" -> "deque<int>" (macro-wrapped to VisualizerDeque).
-   - "priority_queue<...>" -> "priority_queue<...>" (macro-wrapped to VisualizerPriorityQueue).
-   - "unordered_map<int, int>" -> "VisualizerMap". Make sure to use standard VisualizerMap methods:
-     - Use .put(key, val) instead of [key] = val.
-     - Use .get(key) instead of .find() or [key].
-     - Use .count(key) and .erase(key).
-
-2. Track Pointers (Two-Pointer / Binary Search):
-   - Use "focus_pointer(string label, int index)" to highlight indices. Example: focus_pointer("left", l), focus_pointer("right", r), focus_pointer("mid", mid).
-
-3. Track Comparisons & NGE:
-   - Use "compare(int idx1, int idx2)" for element comparisons in array search/sort/stack.
-   - Use "resolve(int index, int value)" to output resolved values (like NGE value at index).
-
-4. Track DFS / BFS / Traversals:
-   - 2D Grid DFS: Use "focus_cell(int r, int c)" when visiting, and "update_cell(int r, int c, int val)" on modification.
-   - Tree DFS: Use "visit(TreeNode* node)" when visiting nodes.
-   - Graph BFS/DFS: Use "visit_graph(int node)" when visiting, and "focus_graph_edge(int u, int v)" when crossing edges.
-
-5. DO NOT touch the function name, arguments, or the Solution class wrapper. Ensure standard headers are NOT added inside the block.
-6. Return ONLY the valid C++ code. Absolutely NO markdown block formatting, NO conversational text, NO explanations.
-`;
 
 app.post('/instrument', async (req, res) => {
     try {

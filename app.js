@@ -1535,7 +1535,11 @@ importLcBtn.addEventListener('click', async () => {
                                 }
                             }
 
-                            // Let user manually trigger Visualizer Execution when ready
+                            // Auto-trigger animation with the newly loaded code & array
+                            if (messageBox) {
+                                messageBox.innerHTML = '<span class="loading-dots" style="color: var(--neon-blue);">Instrumenting and running visualizer...</span>';
+                            }
+                            setTimeout(() => generateBtn.click(), 100);
 
                         } catch (err) {
                             console.error(err);
