@@ -250,7 +250,7 @@ Example Test Case: ${question.exampleTestcases}`;
             cppSnippet: cppSnippet,
             array: firstTest,
             concepts: result.concepts || []
-        });
+        };
         
         // Log the fetched problem if a session ID is provided
         if (sessionId) {
