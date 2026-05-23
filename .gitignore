@@ -18,3 +18,4 @@ fix_html2.js
 test_llm_speed.js
 test_median.js
 ui_test.js
+.logs

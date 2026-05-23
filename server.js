@@ -250,7 +250,7 @@ Example Test Case: ${question.exampleTestcases}`;
             cppSnippet: cppSnippet,
             array: firstTest,
             concepts: result.concepts || []
-        };
+        });
         
         // Log the fetched problem if a session ID is provided
         if (sessionId) {
@@ -290,80 +290,27 @@ app.post('/leetcode/solve-concept', async (req, res) => {
 
         const cleanContent = (content || '').replace(/<[^>]*>/g, '');
 
-        const systemPrompt = `You are a master C++ compiler, DSA expert, and visualizer refactoring engine.
-You are given a LeetCode problem, C++ starter snippet, and a specific chosen conceptual approach.
-Your task is to write a complete working solution in C++17 matching the selected concept, and refactor it by injecting our high-fidelity C++ Visualizer Tracing Macros.
+        const systemPrompt = `You are a C++17 DSA expert. Write a complete, compileable class Solution implementing the given approach. Output ONLY a JSON object — no markdown, no prose.
 
-CRITICAL: You MUST write the complete, compileable \`class Solution\` template containing the solution function logic. DO NOT write a main() function. DO NOT write any driver program. ONLY output the \`class Solution\` block exactly as LeetCode standard C++ expects.
+MACROS (inject these into your solution):
+- visit(i): called when entering a loop iteration or visiting array index i
+- compare(i, j): called before any if-condition that compares arr[i] vs arr[j] (both must be valid indices)
+- resolve(i, val): called when updating the answer/result (i=index or 0, val=new result value)
+- focus_pointer("label", idx): called every iteration for each active pointer (two-pointer/sliding window MUST call this for every named pointer every loop)
+- focus_cell(r, c): grid problems only — called when visiting cell (r,c)
+- update_cell(r, c, val): grid problems only — called when modifying cell (r,c)
+- visualizer_push_frame(name, args) / visualizer_pop_frame(): recursive problems only
 
-INTERCEPTED CONTAINERS:
-- If your solution uses std::stack, std::queue, std::deque, or std::priority_queue, declare them normally! They are automatically wrapped by visualizer wrappers to track operations (push, pop, top, empty, size).
+RULES:
+- Containers (stack, queue, deque, priority_queue) declared as LOCAL variables are auto-traced — declare them normally
+- Never put Visualizer wrapper types in function signatures or return types
+- resolve/compare take exactly 2 args; focus_pointer takes exactly 2 args (string label, int index)
+- No assignments inside macro calls
+- No single-line comments (//) — use /* */ to avoid JSON truncation issues
+- unordered_map: use mp.erase(key) not iterator-based erase
 
-EXPLICIT VISUALIZER MACROS (CRITICAL: Match the exact signatures and arity below):
-- compare(i, j): Log index comparison or element comparison. ONLY takes exactly TWO arguments (index1, index2).
-- resolve(i, val): Log answer resolution (e.g. found answer for index i, or updated maximum/result). ONLY takes exactly TWO arguments (index, value). Do NOT call resolve(val) with one argument!
-- visit(n): Log selection/traversal of index/element/node n. Takes exactly ONE argument (index or node).
-- focus_pointer(label, idx): Track dual-pointers (e.g., left/right, low/high, slow/fast). CRITICAL: If this is a sliding window or two-pointer problem, you MUST call focus_pointer("left", left) and focus_pointer("right", right) in every iteration of the loop to highlight the active window!
-- focus_cell(r, c) & update_cell(r, c, val): Grid operations. DO NOT use these unless the problem is a 2D matrix/grid problem!
-- focus_node(node, label) & update_next(from, to): Linked List node focus and pointer adjustments. DO NOT use these unless it is a ListNode/LinkedList problem!
-- visualizer_push_frame(name, args) & visualizer_pop_frame(): Recursive DFS stack frames. DO NOT use unless it is recursive.
-
-CRITICAL MACRO WARNINGS & RULES:
-1. Never call \`resolve(val)\` or \`resolve()\` with one or zero arguments. It MUST be called as \`resolve(index, val)\` with exactly TWO arguments.
-2. Never call \`focus_pointer(idx)\` with one argument. It MUST be called as \`focus_pointer(label, idx)\` with exactly TWO arguments, e.g. \`focus_pointer("left", left)\` or \`focus_pointer("right", right)\`.
-3. Never perform assignments inside a macro call, e.g. do NOT do \`update_cell(0, left, "oldLeft" = charIndexMap[c]);\` or \`resolve(0, left, "label" = value)\`. Perform assignments on separate lines, and pass simple variables/expressions to the macros.
-4. Do NOT use \`focus_cell\`, \`update_cell\`, \`focus_node\`, \`update_next\` macros unless the problem explicitly uses that structure (matrix/grid for cells, ListNode for nodes).
-
-C++ COMPILATION & SLIDING WINDOW RULES:
-1. Do NOT use unordered_map iterator ranges like 'mp.erase(mp.begin(), prev(mp.end()))' or 'std::prev(mp.end())' because unordered_map iterators are only forward iterators and lack bidirectional traversal support, causing static assertion compile failures.
-2. In sliding windows or string character count maps, standard lookup and individual erase is preferred:
-   - Use 'mp.erase(s[left])' inside a sliding window loop as 'left' increments.
-3. For 'compare(i, j)', make sure 'i' and 'j' are valid integer indices within array boundaries.
-
-EXAMPLE OF INSTRUMENTED TWO-POINTERS / SLIDING-WINDOW SOLUTION:
-\`\`\`cpp
-class Solution {
-public:
-    int lengthOfLongestSubstring(string s) {
-        int n = s.length();
-        int left = 0, maxLength = 0;
-        unordered_map<char, int> charIndex;
-        for (int right = 0; right < n; right++) {
-            focus_pointer("left", left);
-            focus_pointer("right", right);
-            visit(right);
-            if (charIndex.count(s[right])) {
-                compare(left, charIndex[s[right]]);
-                // Shift left pointer past the last seen index of the duplicate
-                left = max(left, charIndex[s[right]] + 1);
-            }
-            charIndex[s[right]] = right;
-            maxLength = max(maxLength, right - left + 1);
-            resolve(right, maxLength);
-        }
-        return maxLength;
-    }
-};
-\`\`\`
-
-IMPORTANT FOR CODE INTEGRITY:
-- Write correct, optimal, fully compileable C++ code. Do not omit namespaces or headers that might be needed.
-- CRITICAL: Use proper '\\n' newline characters in the JSON string for the code. Do NOT output the code as a single line.
-- CRITICAL: Do NOT use single-line comments (//). Use multi-line comments (/* */) instead to prevent accidental truncation if newlines are stripped.
-- CRITICAL: You MUST fully implement the algorithm logic. DO NOT return a stub. DO NOT return comments like /* your logic here */. The code must actually solve the problem.
-- Return a valid JSON object matching the following structure:
-{
-  "cleanCode": "The fully implemented standard class Solution C++ block without any visualizer macros.",
-  "array": "Formatted test case input string (e.g., '2, 7, 11, 15' or 'abcabcbb').",
-  "problemType": "Detect which active visualizer container to display: 'array', 'stack', 'heap', 'tree', 'grid', 'list', 'map', 'graph'.",
-  "timeComplexity": "Big-O time complexity string (e.g., 'O(N)').",
-  "spaceComplexity": "Big-O space complexity string (e.g., 'O(N)').",
-  "bottlenecks": "Detailed explanation of core algorithm bottlenecks and allocations.",
-  "edgeCases": [
-    { "caseName": "Edge Case Name 1", "input": "Input values formatted for visualizer" },
-    { "caseName": "Edge Case Name 2", "input": "Input values formatted for visualizer" }
-  ]
-}`;
+Return this JSON:
+{"cleanCode":"class Solution without macros","array":"sample input e.g. 2,7,11,15","problemType":"array|stack|heap|tree|grid|list|map|graph","timeComplexity":"O(N)","spaceComplexity":"O(N)","bottlenecks":"explanation","edgeCases":[{"caseName":"name","input":"values"}]}`;
 
         const prompt = `Problem Title: ${title}
 Difficulty: ${difficulty}
@@ -413,35 +360,22 @@ First sample input default: ${array}`;
     }
 });
 
-const INSTRUMENT_SYSTEM_PROMPT = `
-You are an expert C++ developer and algorithm visualization tutor.
-You are given raw C++ code. Your ONLY job is to inject visualizer tracking hooks into the code without changing the time/space complexity or logical correctness.
+const INSTRUMENT_SYSTEM_PROMPT = `You are a C++ instrumentation engine. Inject visualizer tracking macros into the given C++ class Solution. Return ONLY the instrumented C++ class block — no markdown, no explanations.
 
-CRITICAL RULES:
-1. Wrap collections:
-   - "stack<int>" -> "stack<int>" (which is macro-wrapped automatically to VisualizerStack).
-   - "queue<int>" -> "queue<int>" (macro-wrapped to VisualizerQueue).
-   - "deque<int>" -> "deque<int>" (macro-wrapped to VisualizerDeque).
-   - "priority_queue<...>" -> "priority_queue<...>" (macro-wrapped to VisualizerPriorityQueue).
-   - "unordered_map<int, int>" -> "VisualizerMap". Make sure to use standard VisualizerMap methods:
-     - Use .put(key, val) instead of [key] = val.
-     - Use .get(key) instead of .find() or [key].
-     - Use .count(key) and .erase(key).
+MACROS TO USE:
+- visit(i): at the start of each loop body when iterating over an array index i
+- compare(i, j): immediately before any if-condition comparing arr[i] vs arr[j] (valid indices only)
+- resolve(i, val): when the answer/result variable is updated (i=index or 0, val=new value)
+- focus_pointer("label", idx): EVERY iteration for each active pointer — two-pointer and sliding window MUST emit this for every named pointer on every loop pass
+- focus_cell(r, c): grid only — on visiting cell; update_cell(r, c, val): grid only — on modifying cell
+- visualizer_push_frame(name, args) / visualizer_pop_frame(): recursive only
 
-2. Track Pointers (Two-Pointer / Binary Search):
-   - Use "focus_pointer(string label, int index)" to highlight indices. Example: focus_pointer("left", l), focus_pointer("right", r), focus_pointer("mid", mid).
-
-3. Track Comparisons & NGE:
-   - Use "compare(int idx1, int idx2)" for element comparisons in array search/sort/stack.
-   - Use "resolve(int index, int value)" to output resolved values (like NGE value at index).
-
-4. Track DFS / BFS / Traversals:
-   - 2D Grid DFS: Use "focus_cell(int r, int c)" when visiting, and "update_cell(int r, int c, int val)" on modification.
-   - Tree DFS: Use "visit(TreeNode* node)" when visiting nodes.
-   - Graph BFS/DFS: Use "visit_graph(int node)" when visiting, and "focus_graph_edge(int u, int v)" when crossing edges.
-
-5. DO NOT touch the function name, arguments, or the Solution class wrapper. Ensure standard headers are NOT added inside the block.
-6. Return ONLY the valid C++ code. Absolutely NO markdown block formatting, NO conversational text, NO explanations.
+STRICT RULES:
+- NEVER change function signatures, parameter types, or return types
+- Local stack/queue/deque/priority_queue variables are auto-traced — leave their type declarations as-is
+- resolve and compare each take exactly 2 args; focus_pointer takes exactly 2 args (string label, int index)
+- No assignments inside macro arguments
+- No single-line (//) comments — use /* */ only
 `;
 
 app.post('/generate', async (req, res) => {
@@ -459,7 +393,9 @@ app.post('/generate', async (req, res) => {
             sessionId = 'default',
             attempt = 0,
             title = '',
-            content = ''
+            content = '',
+            provider = '',
+            model = ''
         } = req.body;
         const skipAi = noAI === true || skipAI === true;
 
@@ -1143,8 +1079,8 @@ ${
                 console.log(`Instrumentation attempt ${instrAttempt}/${MAX_INSTRUMENT_ATTEMPTS} for "${title || 'unknown'}"...`);
 
                 const instrPrompt = instrAttempt === 1
-                    ? `Problem: ${title || 'Algorithm Problem'}\n${cleanContent ? `Description: ${cleanContent}\n` : ''}Inject visualizer tracking macros into this C++ code. Return ONLY the instrumented C++ class block, no explanations.\n\n${code}`
-                    : `The instrumented C++ code you produced FAILED to compile.\nProblem: ${title || 'Algorithm Problem'}\n${cleanContent ? `Description: ${cleanContent}\n` : ''}Original clean code:\n${code}\n\nYour failed attempt:\n${lastInstrCode}\n\nCompiler error:\n${instrError}\n\nFix ALL compilation errors. Return ONLY the corrected, instrumented C++ code.`;
+                    ? `Problem: ${title || 'Algorithm Problem'}${cleanContent ? `\n${cleanContent}` : ''}\n\n${code}`
+                    : `COMPILE ERROR — fix it.\nOriginal code:\n${code}\n\nFailed attempt:\n${lastInstrCode}\n\nError:\n${instrError}`;
 
                 try {
                     const instrResponse = await runLLM(instrPrompt, INSTRUMENT_SYSTEM_PROMPT, false);
@@ -1528,7 +1464,7 @@ int main() {
 
 app.post('/diagnose', async (req, res) => {
     try {
-        const { code, compilerError } = req.body;
+        const { code, compilerError, provider, model } = req.body;
         if (!code || !compilerError) {
             return res.status(400).json({ error: "Code and compilerError are required" });
         }

@@ -1,4 +1,4 @@
-# Antigravity DSA LeetCode Visualizer
+# AI Powered DSA LeetCode Visualizer
 
 Step-by-step interactive visualizer for LeetCode-style C++ algorithms. Your solution runs in an **instrumented C++ sandbox** that compiles locally and emits a high-fidelity JSON event trace; an optional LLM (Ollama/Groq) adds beginner-friendly messages; the browser replays the trace frame by frame.
 

@@ -1,11 +1,11 @@
 'use strict';
 
-// LLM Router — supports Ollama, Groq, OpenAI, and Anthropic.
+// LLM Router — supports Groq, OpenAI, Anthropic, and Ollama (fallback).
 //
 // Priority order when no explicit provider is requested:
-//   1. Ollama (local, no key needed)
-//   2. Provider named by LLM_PROVIDER env var
-//   3. First available cloud provider (Groq → OpenAI → Anthropic)
+//   1. Provider named by LLM_PROVIDER env var
+//   2. First available keyed provider (Groq → OpenAI → Anthropic)
+//   3. Ollama (local, only when no API keys are configured)
 //
 // Per-request override: pass { provider, model } in the opts argument.
 
@@ -14,38 +14,14 @@ const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_API_VERSION = '2023-06-01';
 
 const PROVIDER_DEFAULTS = {
-    ollama:    { url: OLLAMA_URL,                                    model: process.env.OLLAMA_MODEL    || 'llama3' },
-    groq:      { url: 'https://api.groq.com/openai/v1/chat/completions', model: process.env.GROQ_MODEL || 'llama-3.1-8b-instant' },
-    openai:    { url: 'https://api.openai.com/v1/chat/completions',  model: process.env.OPENAI_MODEL    || 'gpt-4o-mini' },
-    anthropic: { url: ANTHROPIC_URL,                                 model: process.env.ANTHROPIC_MODEL || 'claude-haiku-4-5-20251001' },
+    ollama:    { url: OLLAMA_URL,                                        model: process.env.OLLAMA_MODEL || 'llama3' },
+    groq:      { url: 'https://api.groq.com/openai/v1/chat/completions', model: process.env.GROQ_MODEL  || 'llama-3.1-8b-instant' },
+    openai:    { url: 'https://api.openai.com/v1/chat/completions',      model: process.env.OPENAI_MODEL    || 'gpt-4o-mini' },
+    anthropic: { url: ANTHROPIC_URL,                                     model: process.env.ANTHROPIC_MODEL || 'claude-haiku-4-5-20251001' },
 };
 
 // Metadata exposed to the frontend via /llm/providers
 const PROVIDER_CATALOG = [
-    {
-        id: 'ollama',
-        label: 'Ollama (Local)',
-        requiresKey: false,
-        models: [
-            { id: 'llama3',       label: 'Llama 3 8B' },
-            { id: 'llama3:70b',   label: 'Llama 3 70B' },
-            { id: 'mistral',      label: 'Mistral 7B' },
-            { id: 'codellama',    label: 'Code Llama' },
-            { id: 'phi3',         label: 'Phi-3 Mini' },
-        ],
-    },
-    {
-        id: 'groq',
-        label: 'Groq',
-        requiresKey: true,
-        envKey: 'GROQ_API_KEY',
-        models: [
-            { id: 'llama-3.1-8b-instant',   label: 'Llama 3.1 8B (fast)' },
-            { id: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B' },
-            { id: 'mixtral-8x7b-32768',      label: 'Mixtral 8x7B' },
-            { id: 'gemma2-9b-it',            label: 'Gemma 2 9B' },
-        ],
-    },
     {
         id: 'openai',
         label: 'OpenAI',
@@ -53,9 +29,8 @@ const PROVIDER_CATALOG = [
         envKey: 'OPENAI_API_KEY',
         models: [
             { id: 'gpt-4o-mini',  label: 'GPT-4o Mini' },
-            { id: 'gpt-4o',       label: 'GPT-4o' },
-            { id: 'gpt-4-turbo',  label: 'GPT-4 Turbo' },
-            { id: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo' },
+            { id: 'gpt-4.1-mini', label: 'GPT-4.1 Mini' },
+            { id: 'gpt-5.1-mini', label: 'GPT-5.1 Mini' },
         ],
     },
     {
@@ -64,9 +39,33 @@ const PROVIDER_CATALOG = [
         requiresKey: true,
         envKey: 'ANTHROPIC_API_KEY',
         models: [
-            { id: 'claude-haiku-4-5-20251001',  label: 'Claude Haiku (fast)' },
-            { id: 'claude-sonnet-4-6', label: 'Claude Sonnet' },
-            { id: 'claude-opus-4-7',   label: 'Claude Opus' },
+            { id: 'claude-haiku-4-5-20251001', label: 'Claude Haiku (fast)' },
+            { id: 'claude-sonnet-4-6',         label: 'Claude Sonnet 4.6' },
+            { id: 'claude-opus-4-7',           label: 'Claude Opus 4.7' },
+        ],
+    },
+    {
+        id: 'groq',
+        label: 'Groq',
+        requiresKey: true,
+        envKey: 'GROQ_API_KEY',
+        models: [
+            { id: 'llama-3.1-8b-instant',    label: 'Llama 3.1 8B (fast)' },
+            { id: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B' },
+            { id: 'mixtral-8x7b-32768',      label: 'Mixtral 8x7B' },
+            { id: 'gemma2-9b-it',            label: 'Gemma 2 9B' },
+        ],
+    },
+    {
+        id: 'ollama',
+        label: 'Ollama (Local)',
+        requiresKey: false,
+        models: [
+            { id: 'llama3',    label: 'Llama 3 8B' },
+            { id: 'llama3:70b', label: 'Llama 3 70B' },
+            { id: 'mistral',   label: 'Mistral 7B' },
+            { id: 'codellama', label: 'Code Llama' },
+            { id: 'phi3',      label: 'Phi-3 Mini' },
         ],
     },
 ];
@@ -184,16 +183,13 @@ async function runLLM(prompt, systemPrompt, formatJson = false, opts = {}) {
 function buildQueue(requestedProvider) {
     const envDefault = (process.env.LLM_PROVIDER || '').toLowerCase();
 
-    // All providers in default priority order
-    const defaultOrder = ['ollama', 'groq', 'openai', 'anthropic'];
-
-    // Filter to only configured/available providers
-    const available = defaultOrder.filter(id => {
+    // Keyed providers in priority order
+    const available = ['groq', 'openai', 'anthropic'].filter(id => {
         const catalog = PROVIDER_CATALOG.find(p => p.id === id);
-        return !catalog.requiresKey || !!process.env[catalog.envKey];
+        return !!process.env[catalog.envKey];
     });
-    // Ollama has no key requirement, always include it as first attempt
-    if (!available.includes('ollama')) available.unshift('ollama');
+    // Ollama is last-resort fallback only when no API keys are configured
+    if (available.length === 0) available.push('ollama');
 
     // Move explicit request to front
     const primary = requestedProvider || envDefault;

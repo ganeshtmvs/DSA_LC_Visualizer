@@ -67,6 +67,17 @@ async function loadProviders() {
 
         providerSel.addEventListener('change', updateModels);
         updateModels();
+
+        // Show Run/Demo only when provider AND model are explicitly selected
+        function updateRunVisibility() {
+            const hasModel = !!modelSel.value;
+            if (generateBtn) generateBtn.style.display = hasModel ? '' : 'none';
+            if (demoBtn) demoBtn.style.display = hasModel ? 'none' : '';
+        }
+
+        providerSel.addEventListener('change', updateRunVisibility);
+        modelSel.addEventListener('change', updateRunVisibility);
+        updateRunVisibility();
     } catch (e) {
         console.warn('Could not load LLM providers:', e.message);
     }
@@ -120,7 +131,7 @@ const DEMO_TRACE = {
     ]
 };
 
-// DOM Elements
+// DOM Elements (some only exist on visualize.html, guard with null checks)
 const arrayContainer = document.getElementById('array-container');
 const stackContainer = document.getElementById('stack-container');
 const messageBox = document.getElementById('message-box');
@@ -333,7 +344,7 @@ function renderTestCaseTabs() {
             if (r.trace) {
                 loadTraceData(r.trace, r.input);
             } else {
-                messageBox.innerText = `Case ${idx + 1} failed: ${r.error}`;
+                if (messageBox) messageBox.innerText = `Case ${idx + 1} failed: ${r.error}`;
             }
             renderTestCaseTabs();
         });
@@ -370,9 +381,9 @@ function stopAutoplay() {
 
 function startAutoplay() {
     stopAutoplay();
-    const delay = parseInt(autoplaySpeed.value, 10) || 1000;
+    const delay = autoplaySpeed ? (parseInt(autoplaySpeed.value, 10) || 1000) : 1000;
     autoplayActive = true;
-    autoplayBtn.textContent = '⏸ Pause';
+    if (autoplayBtn) autoplayBtn.textContent = '⏸ Pause';
     autoplayTimer = setInterval(() => {
         if (!animationData || currentStep >= animationData.steps.length) {
             stopAutoplay();
@@ -439,8 +450,9 @@ function showLcImportNotice(code) {
 function render() {
     // Premium integrations: Synchronized code viewer rendering
     const codeViewerContainer = document.getElementById('code-viewer-container');
+    const cmWrapper = cmEditor ? cmEditor.getWrapperElement() : codeInput;
     if (animationData) {
-        codeInput.classList.add('hidden');
+        if (cmWrapper) cmWrapper.classList.add('hidden');
         if (codeViewerContainer) {
             codeViewerContainer.classList.remove('hidden');
             if (codeViewerContainer.children.length === 0) {
@@ -448,7 +460,7 @@ function render() {
             }
         }
     } else {
-        codeInput.classList.remove('hidden');
+        if (cmWrapper) cmWrapper.classList.remove('hidden');
         if (codeViewerContainer) {
             codeViewerContainer.classList.add('hidden');
             codeViewerContainer.innerHTML = '';
@@ -456,17 +468,17 @@ function render() {
     }
 
     if (!animationData) {
-        arrayContainer.innerHTML = '';
-        stackContainer.innerHTML = '';
+        if (arrayContainer) arrayContainer.innerHTML = '';
+        if (stackContainer) stackContainer.innerHTML = '';
         const containers = ['tree-container', 'grid-container', 'list-container', 'heap-container', 'map-container', 'graph-container', 'recursive-stack-container'];
         containers.forEach(id => {
             const el = document.getElementById(id);
             if (el) el.innerHTML = '';
         });
-        messageBox.innerText = 'No trace loaded. Pick a template, click Generate, or use Load demo trace for instant playback.';
-        stepCounter.innerText = 'Step: 0 / 0';
-        prevBtn.disabled = true;
-        nextBtn.disabled = true;
+        if (messageBox) messageBox.innerText = 'No trace loaded. Pick a template, click Generate, or use Load demo trace for instant playback.';
+        if (stepCounter) stepCounter.innerText = 'Step: 0 / 0';
+        if (prevBtn) prevBtn.disabled = true;
+        if (nextBtn) nextBtn.disabled = true;
         if (autoplayBtn) autoplayBtn.disabled = true;
         if (downloadJsonBtn) downloadJsonBtn.disabled = true;
         syncStepSlider(0);
@@ -698,11 +710,11 @@ function render() {
     }
 
     // 3. Draw Array
-    arrayContainer.innerHTML = '';
+    if (arrayContainer) arrayContainer.innerHTML = '';
     const arrSource = animationData.array || [];
     const filteredArray = arrSource.filter(x => x !== null);
-    if (filteredArray.length > 0 && !isGridProblem && !isGraphProblem) {
-        arraySection.classList.remove('hidden');
+    if (arrayContainer && filteredArray.length > 0 && !isGridProblem && !isGraphProblem) {
+        if (arraySection) arraySection.classList.remove('hidden');
         arrSource.forEach((val, idx) => {
             if (val === null) return;
             const box = document.createElement('div');
@@ -747,12 +759,12 @@ function render() {
             arrayContainer.appendChild(box);
         });
     } else {
-        arraySection.classList.add('hidden');
+        if (arraySection) arraySection.classList.add('hidden');
     }
 
     // 4. Draw Stack / Queue
-    stackContainer.innerHTML = '';
-    if (stack.length > 0 || steps.some(s => s.action === 'push_stack' || s.action === 'pop_stack' || s.action === 'push_queue' || s.action === 'pop_queue')) {
+    if (stackContainer) stackContainer.innerHTML = '';
+    if (stackContainer && (stack.length > 0 || steps.some(s => s.action === 'push_stack' || s.action === 'pop_stack' || s.action === 'push_queue' || s.action === 'pop_queue'))) {
         if (stackSection) stackSection.classList.remove('hidden');
         stack.forEach((idx) => {
             const item = document.createElement('div');
@@ -773,7 +785,7 @@ function render() {
                 item.classList.add('comparing');
             }
 
-            stackContainer.appendChild(item);
+            if (stackContainer) stackContainer.appendChild(item);
         });
     } else {
         if (stackSection) stackSection.classList.add('hidden');
@@ -1160,20 +1172,25 @@ function render() {
         }
     }
 
-    // 6. Update Controls & Message
-    if (currentStep === 0) {
-        messageBox.innerText = "AI Trace Generated! Press 'Next' to start tracking.";
-    } else {
-        const currentStepData = steps[currentStep - 1];
-        messageBox.innerText = currentStepData.message || `Executing step ${currentStep}...`;
+    // 6. Update Controls & Message (elements only present on visualize.html; guard with null checks)
+    if (messageBox) {
+        if (currentStep === 0) {
+            const usingAI = skipAiCheckbox && skipAiCheckbox.checked;
+            if (messageBox) messageBox.innerText = usingAI
+                ? "Trace ready with AI commentary — use the controls below to step through."
+                : "Trace ready — use the controls below to step through.";
+        } else {
+            const currentStepData = steps[currentStep - 1];
+            if (messageBox) messageBox.innerText = currentStepData.message || `Executing step ${currentStep}...`;
+        }
     }
 
-    stepCounter.innerText = `Step: ${currentStep} / ${maxSteps}`;
+    if (stepCounter) stepCounter.innerText = `Step: ${currentStep} / ${maxSteps}`;
     syncStepSlider(maxSteps);
     updateStepList();
 
-    prevBtn.disabled = currentStep === 0;
-    nextBtn.disabled = currentStep === maxSteps;
+    if (prevBtn) prevBtn.disabled = currentStep === 0;
+    if (nextBtn) nextBtn.disabled = currentStep === maxSteps;
     if (autoplayBtn) {
         autoplayBtn.disabled = false;
         if (currentStep === maxSteps && autoplayActive) {
@@ -1332,7 +1349,7 @@ importLcBtn.addEventListener('click', async () => {
         setCode('// Discovering problem and generating solution approach...');
     }
     if (messageBox) {
-        messageBox.innerHTML = '<span class="loading-dots" style="color: var(--neon-blue);">AI is formulating optimal solution concepts & instrumented traces...</span>';
+        if (messageBox) messageBox.innerHTML = '<span class="loading-dots" style="color: var(--neon-blue);">AI is formulating optimal solution concepts & instrumented traces...</span>';
     }
 
     // Hide previous premium/diagnostics panels to prevent old data visibility
@@ -1486,7 +1503,7 @@ importLcBtn.addEventListener('click', async () => {
                         if (instrumentBtn) instrumentBtn.disabled = true;
                         if (importLcBtn) importLcBtn.disabled = true;
                         if (messageBox) {
-                            messageBox.innerHTML = '<span class="loading-dots" style="color: var(--neon-blue);">AI is writing and auto-instrumenting the chosen concept solution...</span>';
+                            if (messageBox) messageBox.innerHTML = '<span class="loading-dots" style="color: var(--neon-blue);">AI is writing and auto-instrumenting the chosen concept solution...</span>';
                         }
 
                         try {
@@ -1591,7 +1608,7 @@ importLcBtn.addEventListener('click', async () => {
 
                             // Auto-trigger animation with the newly loaded code & array
                             if (messageBox) {
-                                messageBox.innerHTML = '<span class="success-message">Code and tests loaded successfully! Press Run to execute.</span>';
+                                if (messageBox) messageBox.innerHTML = '<span class="success-message">Code and tests loaded successfully! Press Run to execute.</span>';
                             }
 
                         } catch (err) {
@@ -1836,8 +1853,9 @@ generateBtn.addEventListener('click', async () => {
 
     generateBtn.disabled = true;
     if (runAllBtn) runAllBtn.disabled = true;
+    if (demoBtn) { demoBtn.disabled = true; demoBtn.title = 'Waiting for LLM commentary...'; }
     loadingSpinner.classList.remove('hidden');
-    messageBox.innerText = 'Requesting trace from local AI...';
+    if (messageBox) messageBox.innerText = 'Requesting trace from local AI...';
     savePreferences();
 
     let autoRetries = parseInt(generateBtn.dataset.retries || '0');
@@ -1853,7 +1871,7 @@ generateBtn.addEventListener('click', async () => {
     }
 
     try {
-        const data = await fetchTrace(code, arrayStr, skipAiCheckbox.checked, window.currentSessionId, autoRetries);
+        const data = await fetchTrace(code, arrayStr, !skipAiCheckbox.checked, window.currentSessionId, autoRetries);
         testCaseResults = [{ input: arrayStr, trace: data, error: null }];
         activeTestCaseIndex = 0;
 
@@ -1861,7 +1879,15 @@ generateBtn.addEventListener('click', async () => {
         const diagPanel = document.getElementById('diagnostics-panel');
         if (diagPanel) diagPanel.classList.add('hidden');
 
-        loadTraceData(data);
+        // Store trace for visualizer page and open it
+        try {
+            localStorage.setItem('dsa_trace_data', JSON.stringify(data));
+            localStorage.setItem('dsa_instrumented_code', window.instrumentedCode || getCode());
+        } catch (lsErr) {
+            console.warn('localStorage write failed:', lsErr);
+        }
+        window.open('visualize.html', '_blank');
+
         renderTestCaseTabs();
 
         // Fetch premium AI additions asynchronously
@@ -1873,7 +1899,7 @@ generateBtn.addEventListener('click', async () => {
     } catch (error) {
         let autoRetries = parseInt(generateBtn.dataset.retries || '0');
         console.error('Failed to generate trace:', error);
-        messageBox.innerText = 'Error: Failed to generate trace.';
+        if (messageBox) messageBox.innerText = 'Error: Failed to generate trace.';
 
         // AI diagnostics call
         const diagPanel = document.getElementById('diagnostics-panel');
@@ -1913,8 +1939,9 @@ generateBtn.addEventListener('click', async () => {
                     if (autoRetries < 3) {
                         generateBtn.dataset.retries = (autoRetries + 1).toString();
                         console.log(`Auto-applying AI fix (Attempt ${autoRetries + 1}/3)...`);
-                        messageBox.innerText = `Auto-fixing compiler error (Attempt ${autoRetries + 1}/3)...`;
+                        if (messageBox) messageBox.innerText = `Auto-fixing compiler error (Attempt ${autoRetries + 1}/3)...`;
                         setTimeout(() => fixBtn.click(), 500);
+                        if (demoBtn) { demoBtn.disabled = false; demoBtn.title = ''; }
                         return; // Prevent clearing loading spinner
                     }
                 } else if (fixBtn) {
@@ -1929,6 +1956,7 @@ generateBtn.addEventListener('click', async () => {
     } finally {
         generateBtn.disabled = false;
         if (runAllBtn) runAllBtn.disabled = false;
+        if (demoBtn) { demoBtn.disabled = false; demoBtn.title = ''; }
         loadingSpinner.classList.add('hidden');
         if (batchProgress) batchProgress.classList.add('hidden');
     }
@@ -1949,6 +1977,7 @@ if (runAllBtn) {
 
         generateBtn.disabled = true;
         runAllBtn.disabled = true;
+        if (demoBtn) { demoBtn.disabled = true; demoBtn.title = 'Waiting for LLM commentary...'; }
         loadingSpinner.classList.remove('hidden');
         if (batchProgress) {
             batchProgress.classList.remove('hidden');
@@ -1957,7 +1986,7 @@ if (runAllBtn) {
         savePreferences();
 
         testCaseResults = [];
-        const noAI = skipAiCheckbox.checked;
+        const noAI = !skipAiCheckbox.checked;
 
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i];
@@ -1975,12 +2004,13 @@ if (runAllBtn) {
             activeTestCaseIndex = firstOk;
             loadTraceData(testCaseResults[firstOk].trace, testCaseResults[firstOk].input);
         } else {
-            messageBox.innerText = 'All cases failed. Check inputs and C++ code.';
+            if (messageBox) messageBox.innerText = 'All cases failed. Check inputs and C++ code.';
         }
         renderTestCaseTabs();
 
         generateBtn.disabled = false;
         runAllBtn.disabled = false;
+        if (demoBtn) { demoBtn.disabled = false; demoBtn.title = ''; }
         loadingSpinner.classList.add('hidden');
         if (batchProgress) {
             const ok = testCaseResults.filter((r) => r.trace).length;
@@ -1990,16 +2020,53 @@ if (runAllBtn) {
 }
 
 
-demoBtn.addEventListener('click', () => {
+demoBtn.addEventListener('click', async () => {
+    const code = window.instrumentedCode || getCode().trim();
+    const arrayStr = arrayInput.value.trim();
+
+    // If we have real code and input, run an actual trace (skip AI for speed)
+    if (code && arrayStr) {
+        const originalLabel = demoBtn.textContent;
+        demoBtn.disabled = true;
+        demoBtn.textContent = '⏳ Running...';
+        if (loadingSpinner) loadingSpinner.classList.remove('hidden');
+        try {
+            const data = await fetchTrace(code, arrayStr, true /* skipAI */, `Demo_${Date.now()}`, 0);
+            demoBtn.textContent = '✅ Ready!';
+            try {
+                localStorage.setItem('dsa_trace_data', JSON.stringify(data));
+                localStorage.setItem('dsa_instrumented_code', window.instrumentedCode || getCode());
+            } catch (lsErr) {
+                console.warn('localStorage write failed:', lsErr);
+            }
+            window.open('visualize.html', '_blank');
+        } catch (err) {
+            demoBtn.textContent = '❌ Failed';
+            alert(`Demo trace failed: ${err.message}`);
+        } finally {
+            demoBtn.disabled = false;
+            if (loadingSpinner) loadingSpinner.classList.add('hidden');
+            setTimeout(() => { demoBtn.textContent = originalLabel; }, 2000);
+        }
+        return;
+    }
+
+    // Fallback: use hardcoded demo data
     testCaseResults = [];
     activeTestCaseIndex = 0;
     if (testCaseTabs) testCaseTabs.classList.add('hidden');
-    loadTraceData(JSON.parse(JSON.stringify(DEMO_TRACE)), DEMO_TRACE.array.join(', '));
-    messageBox.innerText = 'Demo trace loaded (no compile). Press Next or Auto-play.';
+    const demoData = JSON.parse(JSON.stringify(DEMO_TRACE));
+    try {
+        localStorage.setItem('dsa_trace_data', JSON.stringify(demoData));
+        localStorage.setItem('dsa_instrumented_code', window.instrumentedCode || getCode());
+    } catch (lsErr) {
+        console.warn('localStorage write failed:', lsErr);
+    }
+    window.open('visualize.html', '_blank');
 });
 
-// Event Listeners for Player
-nextBtn.addEventListener('click', () => {
+// Event Listeners for Player (buttons only present on visualize.html; guard with null checks)
+if (nextBtn) nextBtn.addEventListener('click', () => {
     stopAutoplay();
     if (animationData && currentStep < animationData.steps.length) {
         currentStep++;
@@ -2007,7 +2074,7 @@ nextBtn.addEventListener('click', () => {
     }
 });
 
-prevBtn.addEventListener('click', () => {
+if (prevBtn) prevBtn.addEventListener('click', () => {
     stopAutoplay();
     if (currentStep > 0) {
         currentStep--;
@@ -2041,7 +2108,7 @@ autoplaySpeed?.addEventListener('change', () => {
     if (autoplayActive) startAutoplay();
 });
 
-autoplayBtn.addEventListener('click', () => {
+if (autoplayBtn) autoplayBtn.addEventListener('click', () => {
     if (!animationData) return;
     if (autoplayActive) {
         stopAutoplay();
@@ -2054,7 +2121,7 @@ autoplayBtn.addEventListener('click', () => {
     }
 });
 
-autoplaySpeed.addEventListener('change', () => {
+if (autoplaySpeed) autoplaySpeed.addEventListener('change', () => {
     if (autoplayActive) {
         startAutoplay();
     }
