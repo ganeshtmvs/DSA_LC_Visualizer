@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DSA Visualizer — Trace</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        /* Visualize page two-column layout */
+        .visualize-workspace {
+            display: flex;
+            flex-direction: row;
+            gap: 0;
+            height: calc(100vh - 56px);
+            overflow: hidden;
+        }
+        .visualize-code-pane {
+            width: 50%;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            border-right: 1px solid var(--border-color);
+            border-radius: 0;
+        }
+        .visualize-anim-pane {
+            width: 50%;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .visualize-anim-pane .visualizer-pane {
+            flex: 1;
+            border-radius: 0;
+            height: 100%;
+        }
+        .visualize-code-pane .code-editor-wrapper {
+            flex: 1;
+            overflow: auto;
+            padding: 8px 0;
+        }
+        .visualize-code-pane #code-viewer-container {
+            min-height: 100%;
+        }
+    </style>
+</head>
+<body>
+    <!-- Minimal Header -->
+    <header class="app-header">
+        <div class="header-logo">
+            <a href="index.html" class="back-btn control-btn" style="text-decoration:none; padding: 6px 14px; font-size: 13px;">&larr; Back</a>
+            <div class="logo-text" style="margin-left: 12px;">
+                <h2>DSA Visualizer &mdash; Trace</h2>
+            </div>
+        </div>
+        <div class="header-actions-top">
+            <span class="sandbox-status-pill"><span class="status-dot"></span>Sandbox Active</span>
+        </div>
+    </header>
+
+    <!-- Two-column layout: code viewer (left 50%) + animation + player (right 50%) -->
+    <div class="workspace visualize-workspace">
+
+        <!-- LEFT: Code Viewer -->
+        <aside class="workspace-pane visualize-code-pane glass-panel">
+            <div class="pane-header">
+                <div class="pane-header-title">
+                    <span class="editor-icon">💻</span>
+                    <h3>Code Viewer</h3>
+                </div>
+            </div>
+            <div class="code-editor-wrapper" style="flex:1; overflow:auto;">
+                <div id="code-viewer-container" class="code-viewer-container"></div>
+            </div>
+        </aside>
+
+        <!-- RIGHT: Animation + Player -->
+        <main class="workspace-pane visualize-anim-pane">
+
+            <!-- VISUALIZER PANEL -->
+            <section class="visualizer-pane glass-panel">
+                <div class="pane-header">
+                    <div class="pane-header-title">
+                        <span class="visualizer-icon">&#128202;</span>
+                        <h3>Visualizer Animation</h3>
+                    </div>
+                </div>
+
+                <div class="visualizer-scroll-container">
+                    <div class="visualizer-area">
+                        <div id="array-section" class="section array-section">
+                            <h3>Input Array</h3>
+                            <div id="array-container" class="array-container"></div>
+                        </div>
+
+                        <div id="stack-section" class="section stack-section hidden">
+                            <h3 id="stack-header">Stack</h3>
+                            <div id="stack-container" class="stack-container"></div>
+                        </div>
+
+                        <div id="tree-section" class="section tree-section hidden">
+                            <h3>Binary Tree</h3>
+                            <div id="tree-container" class="tree-container"></div>
+                        </div>
+
+                        <div id="grid-section" class="section grid-section hidden">
+                            <h3>2D Grid / Matrix</h3>
+                            <div id="grid-container" class="grid-container"></div>
+                        </div>
+
+                        <div id="list-section" class="section list-section hidden">
+                            <h3>Linked List</h3>
+                            <div id="list-container" class="list-container"></div>
+                        </div>
+
+                        <div id="heap-section" class="section heap-section hidden">
+                            <h3>Priority Heap</h3>
+                            <div id="heap-container" class="heap-container"></div>
+                        </div>
+
+                        <div id="map-section" class="section map-section hidden">
+                            <h3>Hash Map</h3>
+                            <div id="map-container" class="map-container"></div>
+                        </div>
+
+                        <div id="graph-section" class="section graph-section hidden">
+                            <h3>Graph</h3>
+                            <div id="graph-container" class="graph-container"></div>
+                        </div>
+
+                        <!-- Recursive call stack (shown if push_frame steps exist) -->
+                        <div id="recursive-stack-section" class="section recursive-stack-section hidden glass-panel">
+                            <h3>Recursive Call Stack (3D view)</h3>
+                            <div id="recursive-stack-container" class="recursive-stack-container"></div>
+                        </div>
+                    </div>
+
+                    <!-- Player Navigation HUD -->
+                    <div class="controls-area player-controls glass-panel">
+                        <div id="message-box" class="message-box">
+                            Loading trace...
+                        </div>
+
+                        <div class="step-scrubber-row">
+                            <label for="step-slider" class="scrubber-label">Step</label>
+                            <div class="scrubber-container">
+                                <div id="timeline-heatmap" class="timeline-heatmap"></div>
+                                <input type="range" id="step-slider" class="step-slider" min="0" max="0" value="0" disabled>
+                            </div>
+                        </div>
+
+                        <details id="step-list-panel" class="step-list-panel hidden">
+                            <summary>Step list</summary>
+                            <ol id="step-list" class="step-list"></ol>
+                        </details>
+
+                        <div class="player-controls-minimal">
+                            <div class="minimal-left">
+                                <button id="prev-btn" class="icon-btn control-btn-mini" disabled title="Previous Step">&#9198;</button>
+                                <button id="autoplay-btn" class="icon-btn control-btn-mini autoplay-btn" disabled title="Auto-play">&#9654;&#65039;</button>
+                                <button id="next-btn" class="icon-btn control-btn-mini" title="Next Step">&#9197;</button>
+                                <span id="step-counter" class="minimal-counter">Step: 0 / 0</span>
+                            </div>
+
+                            <div class="minimal-right">
+                                <label for="autoplay-speed" class="speed-label" style="display:none;">Speed:</label>
+                                <select id="autoplay-speed" class="speed-select-minimal" title="Playback Speed">
+                                    <option value="500">0.5s</option>
+                                    <option value="1000" selected>1.0s</option>
+                                    <option value="2000">2.0s</option>
+                                </select>
+                                <button id="download-json-btn" class="icon-btn control-btn-mini download-json-btn" disabled title="Download JSON">&#128190;</button>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+                <!-- Execution result pinned below scroll area, never overlaps animation -->
+                <div id="execution-results-panel" class="hidden" style="flex-shrink:0; padding: 6px 14px; margin: 4px 8px 8px; border-radius: 6px; background: rgba(0,255,150,0.08); border: 1px solid rgba(0,255,150,0.25); font-family: var(--font-mono); font-size: 13px; color: var(--accent); box-sizing: border-box;">
+                    <span style="opacity:0.6; font-size:11px; margin-right:6px;">RESULT</span><span id="execution-results-content"></span>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <script src="visualize.js"></script>
+</body>
+</html>
