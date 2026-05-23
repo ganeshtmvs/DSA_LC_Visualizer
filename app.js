@@ -9,6 +9,8 @@ let activeTestCaseIndex = 0;
 const API_BASE = window.location.origin;
 const LS_SKIP_AI = 'dsa-viz-skip-ai';
 const LS_AUTOPLAY_SPEED = 'dsa-viz-autoplay-speed';
+const LS_LLM_PROVIDER = 'dsa-viz-llm-provider';
+const LS_LLM_MODEL = 'dsa-viz-llm-model';
 
 // Prebuilt demo trace (no backend required)
 const DEMO_TRACE = {
@@ -52,10 +54,13 @@ const loadingSpinner = document.getElementById('loading-spinner');
 const algoSelect = document.getElementById('algo-select');
 const leetcodeUrlInput = document.getElementById('leetcode-url');
 const importLcBtn = document.getElementById('import-lc-btn');
+const shareBtn = document.getElementById('share-btn');
 const copyCodeBtn = document.getElementById('copy-code-btn');
 const resetCodeBtn = document.getElementById('reset-code-btn');
 const skipAiCheckbox = document.getElementById('skip-ai-checkbox');
 const lcImportNotice = document.getElementById('lc-import-notice');
+const llmProviderSelect = document.getElementById('llm-provider-select');
+const llmModelSelect = document.getElementById('llm-model-select');
 const stepSlider = document.getElementById('step-slider');
 const stepListPanel = document.getElementById('step-list-panel');
 const stepListEl = document.getElementById('step-list');
@@ -154,7 +159,8 @@ async function fetchTrace(code, arrayStr, noAI) {
             isGraph,
             graphNodes: isGraph ? graphNodes : undefined,
             graphEdges: isGraph ? graphEdges : undefined,
-            noAI
+            noAI,
+            ...getLLMOpts()
         })
     });
 
@@ -1083,8 +1089,131 @@ function render() {
     // (Premium integrations rendering is handled at the top of render)
 }
 
-// Templates
-const templates = {
+// ─── Dynamic Template System ───────────────────────────────────────────────
+// Templates live in templates.json on the server. To add a new template,
+// just add an entry to that file — no code changes needed.
+
+let templates = {};  // populated by loadTemplates()
+
+function applyTemplate(val) {
+    if (!templates[val]) return;
+    const t = templates[val];
+    arrayInput.value = t.array || '';
+    codeInput.value = t.cleanCode || t.code || '';
+    window.instrumentedCode = t.code || '';
+    updateProblemMetadata(val);
+
+    if (leetcodeUrlInput) leetcodeUrlInput.value = '';
+    const conceptsPanel = document.getElementById('lc-concepts-panel');
+    if (conceptsPanel) {
+        conceptsPanel.classList.add('hidden');
+        const cc = document.getElementById('lc-concepts-container');
+        if (cc) cc.innerHTML = '';
+    }
+    ['edge-cases-panel', 'complexity-section', 'diagnostics-panel'].forEach(id => {
+        document.getElementById(id)?.classList.add('hidden');
+    });
+    if (typeof lcImportNotice !== 'undefined' && lcImportNotice) {
+        lcImportNotice.classList.add('hidden');
+    }
+    animationData = null;
+    currentStep = 0;
+    render();
+
+    // Update URL so the page is shareable
+    const url = new URL(window.location);
+    url.searchParams.set('t', val);
+    url.searchParams.delete('code');
+    url.searchParams.delete('input');
+    window.history.replaceState({}, '', url);
+}
+
+function updateProblemMetadata(key) {
+    const info = templates[key];
+    if (!info) return;
+    const titleEl = document.getElementById('problem-title');
+    const difficultyEl = document.getElementById('problem-difficulty');
+    const descEl = document.getElementById('problem-description');
+    const editEl = document.getElementById('problem-editorial');
+    if (titleEl) titleEl.textContent = info.title || key;
+    if (difficultyEl) {
+        if (info.difficulty) {
+            difficultyEl.textContent = info.difficulty;
+            difficultyEl.className = `difficulty-badge ${info.difficulty.toLowerCase()}`;
+            difficultyEl.style.display = '';
+        } else {
+            difficultyEl.style.display = 'none';
+        }
+    }
+    if (descEl) descEl.innerHTML = info.description || '';
+    if (editEl) editEl.innerHTML = info.editorial || '';
+}
+
+async function loadTemplates() {
+    try {
+        const res = await fetch(`${API_BASE}/templates`);
+        const list = await res.json();
+
+        // Build lookup map keyed by template key
+        templates = {};
+        list.forEach(t => { templates[t.key] = t; });
+
+        // Group by category and populate the <select>
+        const select = algoSelect;
+        select.innerHTML = '<option value="">-- Select a Template --</option>';
+
+        const groups = {};
+        list.forEach(t => {
+            const cat = t.category || 'Other';
+            if (!groups[cat]) groups[cat] = [];
+            groups[cat].push(t);
+        });
+
+        Object.entries(groups).forEach(([cat, items]) => {
+            const og = document.createElement('optgroup');
+            og.label = cat;
+            items.forEach(t => {
+                const opt = document.createElement('option');
+                opt.value = t.key;
+                opt.textContent = t.title;
+                og.appendChild(opt);
+            });
+            select.appendChild(og);
+        });
+
+        // Restore from URL param ?t=<key>, then localStorage, then first template
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlTemplate = urlParams.get('t');
+        const urlCode = urlParams.get('code');
+        const urlInput = urlParams.get('input');
+
+        if (urlCode) {
+            // Custom shared code via URL
+            codeInput.value = decodeURIComponent(urlCode);
+            if (urlInput) arrayInput.value = decodeURIComponent(urlInput);
+            select.value = '';
+        } else if (urlTemplate && templates[urlTemplate]) {
+            select.value = urlTemplate;
+            applyTemplate(urlTemplate);
+        } else {
+            // Default to empty state — no template pre-selected
+            select.value = '';
+        }
+    } catch (e) {
+        console.error('Failed to load templates:', e);
+        algoSelect.innerHTML = '<option value="" disabled selected>Failed to load templates</option>';
+    }
+}
+
+algoSelect.addEventListener('change', (e) => {
+    const val = e.target.value;
+    if (val) applyTemplate(val);
+});
+
+// PLACEHOLDER — templates object will be populated below; this block is kept
+// so that existing code referencing "templates" before loadTemplates() resolves
+// does not throw. The actual data:
+const _legacyTemplates = {
     "nge": {
         "array": "4, 2, 5, 1, 8",
         "code": "class Solution {\npublic:\n    vector<int> nextGreaterElements(vector<int>& nums) {\n        int n = nums.size();\n        vector<int> res(n, -1);\n        stack<int> st;\n        for (int i = 0; i < n; i++) {\n            // Compare elements visually\n            while (!st.empty() && compare(st.top(), i)) {\n                int poppedIdx = st.top();\n                st.pop();\n                res[poppedIdx] = nums[i];\n                resolve(poppedIdx, nums[i]);\n            }\n            st.push(i);\n        }\n        return res;\n    }\n};",
@@ -1146,90 +1275,7 @@ const templates = {
         "cleanCode": "class Solution {\npublic:\n    ListNode* reverseList(ListNode* head) {\n        ListNode* prev = nullptr;\n        ListNode* curr = head;\n        while (curr != nullptr) {\n            ListNode* temp = curr->next;\n            if (prev)\n            if (temp)\n            curr->next = prev;\n            prev = curr;\n            curr = temp;\n        }\n        return prev;\n    }\n};"
     }
 };
-
-algoSelect.addEventListener('change', (e) => {
-    const val = e.target.value;
-    
-    if (!val) {
-        arrayInput.value = '';
-        codeInput.value = '';
-        const titleEl = document.getElementById('problem-title');
-        if (titleEl) titleEl.innerText = 'DSA Visualizer';
-        animationData = null;
-        currentStep = 0;
-        render();
-        return;
-    }
-
-    if (templates[val]) {
-        arrayInput.value = templates[val].array;
-        codeInput.value = templates[val].cleanCode || templates[val].code;
-        window.instrumentedCode = templates[val].code;
-        const titleEl = document.getElementById('problem-title');
-        if (titleEl && templates[val].title) {
-            titleEl.innerText = templates[val].title;
-        }
-        
-        // Clear LeetCode inputs and concepts to prevent state pollution
-        if (leetcodeUrlInput) leetcodeUrlInput.value = '';
-        const conceptsPanel = document.getElementById('lc-concepts-panel');
-        if (conceptsPanel) {
-            conceptsPanel.classList.add('hidden');
-            const conceptsContainer = document.getElementById('lc-concepts-container');
-            if (conceptsContainer) conceptsContainer.innerHTML = '';
-        }
-        
-        // Hide premium panels
-        const edgePanel = document.getElementById('edge-cases-panel');
-        if (edgePanel) edgePanel.classList.add('hidden');
-        const compSection = document.getElementById('complexity-section');
-        if (compSection) compSection.classList.add('hidden');
-        const diagPanel = document.getElementById('diagnostics-panel');
-        if (diagPanel) diagPanel.classList.add('hidden');
-        
-        // Hide standard templates notice if visible
-        if (typeof lcImportNotice !== 'undefined' && lcImportNotice) {
-            lcImportNotice.classList.add('hidden');
-        }
-        
-        // Reset trace & playback state
-        animationData = null;
-        currentStep = 0;
-        render();
-    }
-});
-
-// Trigger change on load to populate default template
-algoSelect.dispatchEvent(new Event('change'));
-
-// Reset LeetCode concepts / Restore Template selector if input is cleared
-leetcodeUrlInput.addEventListener('input', () => {
-    if (!leetcodeUrlInput.value.trim()) {
-        const templateSelectGroup = document.getElementById('template-select-group');
-        const conceptsPanel = document.getElementById('lc-concepts-panel');
-        if (templateSelectGroup) {
-            templateSelectGroup.classList.remove('hidden');
-        }
-        if (conceptsPanel) {
-            conceptsPanel.classList.add('hidden');
-            const conceptsContainer = document.getElementById('lc-concepts-container');
-            if (conceptsContainer) conceptsContainer.innerHTML = '';
-        }
-        
-        // Hide premium panels
-        const edgePanel = document.getElementById('edge-cases-panel');
-        if (edgePanel) edgePanel.classList.add('hidden');
-        const compSection = document.getElementById('complexity-section');
-        if (compSection) compSection.classList.add('hidden');
-        const diagPanel = document.getElementById('diagnostics-panel');
-        if (diagPanel) diagPanel.classList.add('hidden');
-        
-        // Hide standard templates notice if visible
-        if (typeof lcImportNotice !== 'undefined' && lcImportNotice) {
-            lcImportNotice.classList.add('hidden');
-        }
-    }
-});
+// _legacyTemplates is kept only as a fallback reference; loadTemplates() replaces `templates`.
 
 importLcBtn.addEventListener('click', async () => {
     const url = leetcodeUrlInput.value.trim();
@@ -1267,7 +1313,7 @@ importLcBtn.addEventListener('click', async () => {
         const response = await fetch(`${API_BASE}/leetcode`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url })
+            body: JSON.stringify({ url, ...getLLMOpts() })
         });
 
         if (!response.ok) {
@@ -1388,7 +1434,8 @@ importLcBtn.addEventListener('click', async () => {
                                     conceptId: c.id,
                                     conceptName: c.name,
                                     conceptSummary: c.summary,
-                                    array: data.array || arrayInput.value
+                                    array: data.array || arrayInput.value,
+                                    ...getLLMOpts()
                                 })
                             });
                             
@@ -1490,6 +1537,69 @@ importLcBtn.addEventListener('click', async () => {
             } else {
                 conceptsContainer.innerHTML = '<div style="color: var(--text-muted); font-size: 0.9rem;">No alternative concepts discovered for this problem.</div>';
             }
+
+            // Store imported data for Save as Template
+            window._lastImportedProblem = data;
+
+            // Show "Save as Template" button in the import notice area
+            const saveBar = document.createElement('div');
+            saveBar.className = 'save-template-bar';
+            saveBar.innerHTML = `
+                <span class="save-template-hint">Want to keep this problem for later?</span>
+                <button class="save-template-btn" id="save-template-btn">💾 Save as Template</button>
+            `;
+            const existingBar = document.getElementById('save-template-bar');
+            if (existingBar) existingBar.remove();
+            saveBar.id = 'save-template-bar';
+            conceptsContainer.parentElement.appendChild(saveBar);
+
+            document.getElementById('save-template-btn').addEventListener('click', async () => {
+                const btn = document.getElementById('save-template-btn');
+                const problem = window._lastImportedProblem;
+                if (!problem) return;
+
+                const slug = (problem.title || 'custom')
+                    .toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+
+                const template = {
+                    key: slug,
+                    title: problem.title || 'Untitled',
+                    difficulty: problem.difficulty || 'Medium',
+                    category: 'LeetCode Import',
+                    array: problem.array || arrayInput.value || '',
+                    description: problem.content || '',
+                    editorial: `<h3>Imported from LeetCode</h3><p>${problem.title}</p>`,
+                    code: window.instrumentedCode || codeInput.value || '',
+                    cleanCode: codeInput.value || ''
+                };
+
+                btn.disabled = true;
+                btn.textContent = 'Saving...';
+
+                try {
+                    const res = await fetch(`${API_BASE}/templates`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(template)
+                    });
+                    const result = await res.json();
+                    if (!res.ok) throw new Error(result.error || 'Save failed');
+
+                    // Reload templates dropdown so new entry appears immediately
+                    await loadTemplates();
+
+                    btn.textContent = '✅ Saved!';
+                    btn.classList.add('saved');
+                    setTimeout(() => {
+                        const bar = document.getElementById('save-template-bar');
+                        if (bar) bar.remove();
+                    }, 2500);
+                } catch (err) {
+                    btn.disabled = false;
+                    btn.textContent = '💾 Save as Template';
+                    alert('Failed to save template: ' + err.message);
+                }
+            });
         }
 
     } catch (error) {
@@ -1595,10 +1705,10 @@ if (instrumentBtn) {
         instrumentStatus.innerHTML = '✨ AI Auto-Instrumenting & Verifying in C++ Sandbox... (Might take up to 20s if compiling retries are needed)';
 
         try {
-            const res = await fetch('http://localhost:3005/instrument', {
+            const res = await fetch(`${API_BASE}/instrument`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ code })
+                body: JSON.stringify({ code, ...getLLMOpts() })
             });
 
             const data = await res.json();
@@ -1730,7 +1840,7 @@ if (resetCodeBtn) {
                 const diagRes = await fetch(`${API_BASE}/diagnose`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ code: codeInput.value, compilerError: error.message })
+                    body: JSON.stringify({ code: codeInput.value, compilerError: error.message, ...getLLMOpts() })
                 });
                 if (!diagRes.ok) throw new Error("Diagnostics failed");
                 const diagData = await diagRes.json();
@@ -2158,7 +2268,7 @@ async function runAIComplexityAnalysis() {
         const res = await fetch(`${API_BASE}/analyze-complexity`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ code })
+            body: JSON.stringify({ code, ...getLLMOpts() })
         });
         if (!res.ok) throw new Error("Complexity API call failed");
         
@@ -2196,7 +2306,7 @@ async function fetchEdgeCaseSuggestions() {
         const res = await fetch(`${API_BASE}/suggest-cases`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ code })
+            body: JSON.stringify({ code, ...getLLMOpts() })
         });
         if (!res.ok) throw new Error("Edge cases API call failed");
         
@@ -2247,7 +2357,8 @@ loadPreferences();
 // Initial Render (Empty state)
 render();
 
-// Dynamic Problem metadata dictionary for pre-loaded templates
+// templateProblemInfo removed — metadata now lives in templates.json
+// and is accessed via the `templates` map populated by loadTemplates().
 const templateProblemInfo = {
     nge: {
         title: "Next Greater Element I",
@@ -2454,25 +2565,6 @@ const templateProblemInfo = {
     }
 };
 
-// Update Problem Metadata in Left Pane
-function updateProblemMetadata(key) {
-    const info = templateProblemInfo[key];
-    if (!info) return;
-
-    const titleEl = document.getElementById('problem-title');
-    const difficultyEl = document.getElementById('problem-difficulty');
-    const descriptionEl = document.getElementById('problem-description');
-    const editorialEl = document.getElementById('problem-editorial');
-
-    if (titleEl) titleEl.textContent = info.title;
-    if (difficultyEl) {
-        difficultyEl.textContent = info.difficulty;
-        difficultyEl.className = `difficulty-badge ${info.difficulty.toLowerCase()}`;
-    }
-    if (descriptionEl) descriptionEl.innerHTML = info.description;
-    if (editorialEl) editorialEl.innerHTML = info.editorial;
-}
-
 // Tab Switcher Controller
 document.querySelectorAll('.lc-tab').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -2488,78 +2580,109 @@ document.querySelectorAll('.lc-tab').forEach(btn => {
     });
 });
 
-// Update change listener on select dropdown
-algoSelect.addEventListener('change', (e) => {
-    const val = e.target.value;
-    if (templates[val]) {
-        arrayInput.value = templates[val].array;
-        codeInput.value = templates[val].cleanCode || templates[val].code;
-        window.instrumentedCode = templates[val].code;
-        updateProblemMetadata(val);
-        
-        // Clear LeetCode inputs and concepts to prevent state pollution
-        if (leetcodeUrlInput) leetcodeUrlInput.value = '';
-        const conceptsPanel = document.getElementById('lc-concepts-panel');
-        if (conceptsPanel) {
-            conceptsPanel.classList.add('hidden');
-            const conceptsContainer = document.getElementById('lc-concepts-container');
-            if (conceptsContainer) conceptsContainer.innerHTML = '';
+// --- LLM provider/model selector ---
+
+function getLLMOpts() {
+    return {
+        provider: llmProviderSelect ? llmProviderSelect.value || undefined : undefined,
+        model:    llmModelSelect    ? llmModelSelect.value    || undefined : undefined,
+    };
+}
+
+async function initLLMSelector() {
+    if (!llmProviderSelect || !llmModelSelect) return;
+
+    const keyHintEl    = document.getElementById('llm-key-hint');
+    const keyTooltipEl = document.getElementById('llm-key-tooltip');
+
+    let providers = [];
+    try {
+        const res = await fetch(`${API_BASE}/llm/providers`);
+        if (res.ok) providers = await res.json();
+    } catch (_) {
+        // server may not be running yet — selectors stay as "Auto / Default"
+        return;
+    }
+
+    // Restore saved selection
+    const savedProvider = localStorage.getItem(LS_LLM_PROVIDER) || '';
+    const savedModel    = localStorage.getItem(LS_LLM_MODEL)    || '';
+
+    // Populate provider dropdown — show ALL providers, including ones without keys
+    llmProviderSelect.innerHTML = '<option value="">Auto</option>';
+    for (const p of providers) {
+        const opt = document.createElement('option');
+        opt.value = p.id;
+        opt.textContent = p.label;
+        if (p.id === savedProvider) opt.selected = true;
+        llmProviderSelect.appendChild(opt);
+    }
+
+    function updateDisclaimer(providerId) {
+        if (!keyHintEl || !keyTooltipEl) return;
+        const provider = providers.find(p => p.id === providerId);
+        if (provider && !provider.available) {
+            keyTooltipEl.textContent = `${provider.label}: API key not configured`;
+            keyHintEl.classList.remove('hidden');
+        } else {
+            keyHintEl.classList.add('hidden');
         }
-        
-        // Hide premium panels
-        const edgePanel = document.getElementById('edge-cases-panel');
-        if (edgePanel) edgePanel.classList.add('hidden');
-        const compSection = document.getElementById('complexity-section');
-        if (compSection) compSection.classList.add('hidden');
-        const diagPanel = document.getElementById('diagnostics-panel');
-        if (diagPanel) diagPanel.classList.add('hidden');
-        
-        // Hide standard templates notice if visible
-        if (typeof lcImportNotice !== 'undefined' && lcImportNotice) {
-            lcImportNotice.classList.add('hidden');
+    }
+
+    function populateModels(providerId) {
+        llmModelSelect.innerHTML = '<option value="">Default</option>';
+        const provider = providers.find(p => p.id === providerId);
+        if (!provider) return;
+        for (const m of provider.models) {
+            const opt = document.createElement('option');
+            opt.value = m.id;
+            opt.textContent = m.label;
+            if (m.id === savedModel) opt.selected = true;
+            llmModelSelect.appendChild(opt);
         }
-        
-        // Reset trace & playback state
-        animationData = null;
-        currentStep = 0;
-        render();
+    }
+
+    populateModels(savedProvider);
+    updateDisclaimer(savedProvider);
+
+    llmProviderSelect.addEventListener('change', () => {
+        localStorage.setItem(LS_LLM_PROVIDER, llmProviderSelect.value);
+        localStorage.removeItem(LS_LLM_MODEL);
+        populateModels(llmProviderSelect.value);
+        updateDisclaimer(llmProviderSelect.value);
+    });
+    llmModelSelect.addEventListener('change', () => {
+        localStorage.setItem(LS_LLM_MODEL, llmModelSelect.value);
+    });
+}
+
+initLLMSelector();
+loadTemplates();
+
+// ─── Shareable URL ─────────────────────────────────────────────────────────
+// When the user edits code manually (no template), update URL with ?code=&input=
+// so they can share their custom snippet.
+codeInput?.addEventListener('input', () => {
+    if (!algoSelect.value) {
+        const url = new URL(window.location);
+        url.searchParams.set('code', encodeURIComponent(codeInput.value));
+        url.searchParams.set('input', encodeURIComponent(arrayInput?.value || ''));
+        url.searchParams.delete('t');
+        window.history.replaceState({}, '', url);
     }
 });
 
-// Reset LeetCode concepts / Restore Template selector if input is cleared
-leetcodeUrlInput.addEventListener('input', () => {
-    if (!leetcodeUrlInput.value.trim()) {
-        const templateSelectGroup = document.getElementById('template-select-group');
-        const conceptsPanel = document.getElementById('lc-concepts-panel');
-        if (templateSelectGroup) {
-            templateSelectGroup.classList.remove('hidden');
-        }
-        if (conceptsPanel) {
-            conceptsPanel.classList.add('hidden');
-            const conceptsContainer = document.getElementById('lc-concepts-container');
-            if (conceptsContainer) conceptsContainer.innerHTML = '';
-        }
-        
-        // Hide premium panels
-        const edgePanel = document.getElementById('edge-cases-panel');
-        if (edgePanel) edgePanel.classList.add('hidden');
-        const compSection = document.getElementById('complexity-section');
-        if (compSection) compSection.classList.add('hidden');
-        const diagPanel = document.getElementById('diagnostics-panel');
-        if (diagPanel) diagPanel.classList.add('hidden');
-        
-        // Hide standard templates notice if visible
-        if (typeof lcImportNotice !== 'undefined' && lcImportNotice) {
-            lcImportNotice.classList.add('hidden');
-        }
-        
-        // Restore selected template metadata and synchronize editor code/inputs
-        algoSelect.dispatchEvent(new Event('change'));
-    }
-});
-
-// Automatically trigger update on load
-setTimeout(() => {
-    updateProblemMetadata(algoSelect.value);
-}, 50);
+if (shareBtn) {
+    shareBtn.addEventListener('click', () => {
+        navigator.clipboard.writeText(window.location.href).then(() => {
+            const orig = shareBtn.textContent;
+            shareBtn.textContent = 'Copied!';
+            shareBtn.style.color = 'var(--success-main)';
+            setTimeout(() => {
+                shareBtn.textContent = orig;
+                shareBtn.style.color = '';
+            }, 2000);
+        });
+    });
+}
 

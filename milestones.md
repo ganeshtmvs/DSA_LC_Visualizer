@@ -1,11 +1,11 @@
-# Antigravity DSA LeetCode Visualizer — Project Milestones
+# AI-Powered DSA LeetCode Visualizer — Project Milestones
 
-This document tracks completed milestones, active work items, and future feature expansion tracks for the **Antigravity DSA LeetCode Visualizer**. Use this as the live checklists to verify features.
+This document tracks completed milestones, active work items, and future feature expansion tracks for the **AI-Powered DSA LeetCode Visualizer**. Use this as the live checklists to verify features.
 
 ---
 
 ## 🎯 Project Overview & Vision
-The **Antigravity DSA LeetCode Visualizer** is a high-fidelity, interactive sandbox application. It allows developers to:
+The **AI-Powered DSA LeetCode Visualizer** is a high-fidelity, interactive sandbox application. It allows developers to:
 1. Fetch any arbitrary LeetCode problem description and C++ starter snippet dynamically.
 2. Generate optimal solutions under several conceptual approaches (Two-Pointers, Hash Map, Stack, Sliding Window, DFS/BFS, Tree/Graph, Heaps).
 3. Auto-instrument solutions with our **C++ Visualizer Tracing Macros** via LLM.
