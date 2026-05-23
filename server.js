@@ -243,7 +243,7 @@ Example Test Case: ${question.exampleTestcases}`;
             }
         }
 
-        res.json({
+        const responseData = {
             title: question.title,
             difficulty: question.difficulty,
             content: question.content,
@@ -251,7 +251,7 @@ Example Test Case: ${question.exampleTestcases}`;
             array: firstTest,
             concepts: result.concepts || []
         };
-        
+
         // Log the fetched problem if a session ID is provided
         if (sessionId) {
             const safeSessionId = sessionId.replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -1181,6 +1181,14 @@ void visualizer_pop_frame_impl(int=0) {}
 #define update_cell(r,c,val) update_cell_impl(r,c,val,__LINE__)
 #define visualizer_push_frame(n,a) visualizer_push_frame_impl(n,a,__LINE__)
 #define visualizer_pop_frame() visualizer_pop_frame_impl(__LINE__)
+template<typename T=int> class VisualizerStack { public: void push(const T&){} void pop(){} T top(){return T();} bool empty(){return true;} size_t size(){return 0;} };
+template<typename T=int> class VisualizerQueue { public: void push(const T&){} void pop(){} T front(){return T();} T back(){return T();} bool empty(){return true;} size_t size(){return 0;} };
+template<typename T=int> class VisualizerDeque { public: void push_back(const T&){} void push_front(const T&){} void pop_back(){} void pop_front(){} T front(){return T();} T back(){return T();} bool empty(){return true;} size_t size(){return 0;} };
+template<typename T=int,typename C=vector<T>,typename Cmp=less<T>> class VisualizerPriorityQueue { public: void push(const T&){} void pop(){} T top(){return T();} bool empty(){return true;} size_t size(){return 0;} };
+#define stack VisualizerStack
+#define queue VisualizerQueue
+#define deque VisualizerDeque
+#define priority_queue VisualizerPriorityQueue
 ${lastInstrCode}
 int main() { return 0; }`;
 
@@ -1518,7 +1526,7 @@ int main() {
 
 app.post('/diagnose', async (req, res) => {
     try {
-        const { code, compilerError } = req.body;
+        const { code, compilerError, provider, model } = req.body;
         if (!code || !compilerError) {
             return res.status(400).json({ error: "Code and compilerError are required" });
         }

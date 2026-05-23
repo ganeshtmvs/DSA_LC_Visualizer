@@ -37,7 +37,7 @@ async function loadProviders() {
         providers.forEach(p => {
             const opt = document.createElement('option');
             opt.value = p.id;
-            opt.textContent = p.label + (p.available ? '' : ' ⚠');
+            opt.textContent = p.label;
             providerSel.appendChild(opt);
         });
 

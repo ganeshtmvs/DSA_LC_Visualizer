@@ -52,10 +52,11 @@ const PROVIDER_CATALOG = [
         requiresKey: true,
         envKey: 'OPENAI_API_KEY',
         models: [
-            { id: 'gpt-4o-mini',  label: 'GPT-4o Mini' },
-            { id: 'gpt-4o',       label: 'GPT-4o' },
-            { id: 'gpt-4-turbo',  label: 'GPT-4 Turbo' },
-            { id: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo' },
+            { id: 'gpt-5.4',         label: 'GPT-5.4' },
+            { id: 'gpt-5.1',         label: 'GPT-5.1' },
+            { id: 'gpt-5.1-mini',    label: 'GPT-5.1 Mini' },
+            { id: 'gpt-4o-mini',     label: 'GPT-4o Mini' },
+            { id: 'gpt-4o',          label: 'GPT-4o' },
         ],
     },
     {
@@ -65,8 +66,8 @@ const PROVIDER_CATALOG = [
         envKey: 'ANTHROPIC_API_KEY',
         models: [
             { id: 'claude-haiku-4-5-20251001',  label: 'Claude Haiku (fast)' },
-            { id: 'claude-sonnet-4-6', label: 'Claude Sonnet' },
-            { id: 'claude-opus-4-7',   label: 'Claude Opus' },
+            { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
+            { id: 'claude-opus-4-7',   label: 'Claude Opus 4.7' },
         ],
     },
 ];
